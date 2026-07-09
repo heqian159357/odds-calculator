@@ -94,6 +94,7 @@
   .stat { background: var(--input); border-radius: 8px; padding: 12px; }
   .stat .k { color: var(--muted); font-size: 12px; }
   .stat .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .stat .diff { font-size: 12px; margin-top: 3px; min-height: 15px; }
   .verdict { padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
   .verdict.good { background: rgba(53,196,106,.12); border: 1px solid var(--good); }
   .verdict.bad { background: rgba(255,90,90,.12); border: 1px solid var(--bad); }
@@ -167,7 +168,7 @@
 
   <div class="card">
     <div class="result-grid">
-      <div class="stat"><div class="k">总投入</div><div class="v" id="totalStake">-</div></div>
+      <div class="stat"><div class="k">总投入</div><div class="v" id="totalStake">-</div><div class="diff" id="stakeDiff"></div></div>
       <div class="stat"><div class="k">命中回报倍数</div><div class="v" id="mult">-</div></div>
       <div class="stat"><div class="k">命中净利润</div><div class="v" id="profit">-</div></div>
       <div class="stat"><div class="k">盈亏平衡概率</div><div class="v" id="breakeven">-</div></div>
@@ -249,8 +250,9 @@ function calc() {
 
   // 计算每个选项凑 2 的倍数后的投注额
   let totalStake = 0;
+  let budget = 0; // 预算模式下的设定额度，供下方差额提示使用
   if (currentMode === 'budget') {
-    const budget = parseFloat(document.getElementById('budget').value) || 0;
+    budget = parseFloat(document.getElementById('budget').value) || 0;
     const alloc = document.getElementById('alloc').value;
 
     // 按策略给每个选项一个分配权重
@@ -322,6 +324,25 @@ function calc() {
   const breakeven = totalStake && minReturn ? totalStake / minReturn : 0; // 保本所需真实概率(按最差)
 
   document.getElementById('totalStake').textContent = totalStake ? totalStake + ' 元' : '-';
+
+  // 差额提示：预算模式下，实际总投入因凑 2 的倍数/凯利跳过可能≠设定预算
+  const diffEl = document.getElementById('stakeDiff');
+  if (currentMode === 'budget' && budget > 0 && totalStake > 0) {
+    const diff = totalStake - budget; // 正=超支，负=没花完
+    if (diff === 0) {
+      diffEl.textContent = '正好等于预算';
+      diffEl.className = 'diff';
+      diffEl.style.color = 'var(--muted)';
+    } else {
+      const sign = diff > 0 ? '超支 +' : '少花 ';
+      diffEl.textContent = `⚠ 与预算${budget}元不符：${sign}${Math.abs(diff)}元`;
+      diffEl.className = 'diff';
+      diffEl.style.color = diff > 0 ? 'var(--bad)' : 'var(--good)';
+    }
+  } else {
+    diffEl.textContent = '';
+  }
+
   document.getElementById('mult').textContent = worstMult ? worstMult.toFixed(2) + ' 倍' : '-';
   document.getElementById('profit').textContent = totalStake ? (worstProfit >= 0 ? '+' : '') + worstProfit.toFixed(1) + ' 元' : '-';
   document.getElementById('breakeven').textContent = breakeven ? (breakeven * 100).toFixed(1) + '%' : '-';
