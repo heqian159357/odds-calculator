@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>竞彩分注计算器 (Dutching)</title>
+
+<!-- ===== 数据埋点 (GoatCounter，免费/隐私合规) =====
+     部署前：把下面 data-goatcounter 里的 YOURCODE 换成你注册的站点代码，
+     形如 https://你的名字.goatcounter.com/count -->
+<script data-goatcounter="https://YOURCODE.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+<script>
+  // 记录自定义事件（哪个功能被用了），未配置埋点时静默跳过
+  function track(name) {
+    try {
+      if (window.goatcounter && window.goatcounter.count) {
+        window.goatcounter.count({ path: 'evt/' + name, title: name, event: true });
+      }
+    } catch (e) {}
+  }
+</script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --line: #2a2e38;
+    --text: #e8eaed;
+    --muted: #9aa0ab;
+    --accent: #ff5a5a;
+    --good: #35c46a;
+    --bad: #ff5a5a;
+    --input: #23272f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
+  }
+  .field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .field label { width: 130px; color: var(--muted); font-size: 14px; }
+  input {
+    background: var(--input); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 8px 10px;
+    font-size: 15px; width: 100%;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  select {
+    background: var(--input); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 8px 10px;
+    font-size: 14px; width: 100%;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: right; padding: 8px 6px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .row-name input { text-align: left; }
+  .odds input { text-align: right; }
+  .del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0 4px; }
+  .del:hover { color: var(--bad); }
+  .btn {
+    background: var(--accent); border: none; color: #fff;
+    border-radius: 8px; padding: 10px 16px; font-size: 14px;
+    cursor: pointer; font-weight: 600;
+  }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  .mode-btn { padding: 8px 12px; font-size: 13px; }
+  .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat { background: var(--input); border-radius: 8px; padding: 12px; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .verdict { padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
+  .verdict.good { background: rgba(53,196,106,.12); border: 1px solid var(--good); }
+  .verdict.bad { background: rgba(255,90,90,.12); border: 1px solid var(--bad); }
+  .hl-good { color: var(--good); }
+  .hl-bad { color: var(--bad); }
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .stake-cell { color: var(--accent); font-weight: 600; }
+  .strat { border-left: 3px solid var(--line); padding: 4px 0 4px 12px; margin-bottom: 14px; }
+  .strat-h { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .strat-f {
+    font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+    background: var(--input); color: var(--good); display: inline-block;
+    padding: 4px 8px; border-radius: 6px; margin-bottom: 6px;
+  }
+  .strat-d { color: var(--muted); font-size: 13px; }
+  .strat-d b { color: var(--text); }
+  .tag {
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 1px 8px; margin-left: 6px; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>竞彩分注计算器 <span style="font-size:13px;color:var(--muted)">Dutching</span></h1>
+  <div class="sub">覆盖一组结果，让「中任意一个」的收回金额相同。核心问题：你的真实概率能不能压过庄家抽水。</div>
+
+  <div class="card">
+    <div class="field">
+      <label>下注模式</label>
+      <div class="btns" style="margin:0">
+        <button class="btn mode-btn" id="mBudget" onclick="setMode('budget')">按总预算分配</button>
+        <button class="btn ghost mode-btn" id="mTarget" onclick="setMode('target')">按目标收回</button>
+      </div>
+    </div>
+    <div class="field" id="budgetField">
+      <label>总投注预算 (元)</label>
+      <input id="budget" type="number" value="100" min="2" step="2">
+    </div>
+    <div class="field" id="allocField">
+      <label>分配策略</label>
+      <select id="alloc" onchange="onAllocChange()">
+        <option value="payout">均衡收回（不看我的判断）</option>
+        <option value="prob">按我看好程度（正比于我估的概率）</option>
+        <option value="kelly">凯利公式（按优势下注，进阶）</option>
+      </select>
+    </div>
+    <div class="field" id="targetField" style="display:none">
+      <label>目标总收回 (元)</label>
+      <input id="target" type="number" value="100" min="1">
+    </div>
+    <div class="note" id="modeNote">固定总花费，自动按赔率把钱分到各选项（凑 2 的倍数），让各结果收回尽量拉平。</div>
+  </div>
+
+  <div class="card">
+    <table id="tbl">
+      <thead>
+        <tr><th style="width:22%">选项</th><th style="width:14%">赔率</th><th style="width:15%">我估概率%</th><th style="width:16%">投注额</th><th style="width:16%">命中收回</th><th style="width:12%">净利</th><th style="width:5%"></th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="note">投注额自动凑成 <b>2 的倍数</b>（每注 2 元规则）。凑整后各结果收回会有高低差，下方以「最差情况」为准判断。</div>
+    <div class="btns" style="flex-wrap:wrap">
+      <button class="btn ghost" onclick="addRow()">+ 加一行</button>
+      <button class="btn ghost" onclick="loadScore()">载入红框比分</button>
+      <button class="btn ghost" onclick="loadGoals()">载入总进球数</button>
+      <button class="btn ghost" onclick="clearRows()">清空</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="result-grid">
+      <div class="stat"><div class="k">总投入</div><div class="v" id="totalStake">-</div></div>
+      <div class="stat"><div class="k">命中回报倍数</div><div class="v" id="mult">-</div></div>
+      <div class="stat"><div class="k">命中净利润</div><div class="v" id="profit">-</div></div>
+      <div class="stat"><div class="k">盈亏平衡概率</div><div class="v" id="breakeven">-</div></div>
+    </div>
+    <div class="result-grid" style="margin-top:12px">
+      <div class="stat"><div class="k">你估的命中总概率</div><div class="v" id="myProb">-</div></div>
+      <div class="stat"><div class="k">期望值 (每投100元)</div><div class="v" id="ev">-</div></div>
+    </div>
+    <div id="verdict" class="verdict bad">填入赔率后自动计算。</div>
+    <div class="note">「盈亏平衡概率」= 各选项 (1÷赔率) 之和。填入每行「我估概率%」后，会算出<b>期望值</b>：长期每投 100 元平均赚/亏多少。正数=正期望值得下，负数=长期亏。</div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:10px;">📖 三种分配策略怎么选</div>
+
+    <div class="strat">
+      <div class="strat-h">① 均衡收回 <span class="tag">保守 · 不需判断</span></div>
+      <div class="strat-f">投注额 ∝ 1 ÷ 赔率</div>
+      <div class="strat-d">把钱按赔率反比铺开，让<b>命中任意一项收回的钱都差不多</b>。不用你判断概率，纯粹追求"无论中哪个结果都一样"。<br><b>适用</b>：你只知道"大概会落在这几个结果里"，但说不清谁概率更高时。<b>代价</b>：赚得平庸，且覆盖越广越接近锁定亏损（抽水）。</div>
+    </div>
+
+    <div class="strat">
+      <div class="strat-h">② 按看好程度 <span class="tag">进攻 · 凭手感</span></div>
+      <div class="strat-f">投注额 ∝ 我估的概率 p</div>
+      <div class="strat-d">越看好的结果投越多，钱正比于你填的概率。<b>命中你重仓的结果时赚更多</b>，收回不再拉平。<br><b>适用</b>：你对某几个结果有明显倾向、想放大高信心项的收益。<b>代价</b>：完全依赖你概率估得准；估歪了会重仓在错的结果上。</div>
+    </div>
+
+    <div class="strat">
+      <div class="strat-h">③ 凯利公式 <span class="tag">最优 · 需真实优势</span></div>
+      <div class="strat-f">下注比例 f = ( b·p − q ) ÷ b　（b=赔率−1，p=我估概率，q=1−p）</div>
+      <div class="strat-d">数学上<b>长期资金增长最快</b>的下注法。它只在"<b>你估的概率 &gt; 庄家隐含概率(1÷赔率)</b>"、即你确实有优势的项上下注，按优势大小分配；没优势的项显示<b>「不下」</b>。<br><b>适用</b>：你相信自己在某些结果上判断比市场准，追求长期最优。<b>代价</b>：波动大，且优势估高了会过度下注 → 实战常用<b>半凯利</b>（金额减半）。若它算出"几乎都不下"，说明你并没有真优势——这是它最诚实的地方。</div>
+    </div>
+
+    <div class="note" style="margin-top:4px">一句话：<b>没把握</b>用①，<b>有倾向</b>用②，<b>相信自己比市场准且追求长期最优</b>用③。三者都改变不了负期望——除非你的概率判断真的比庄家强。</div>
+  </div>
+</div>
+
+<script>
+const rows = document.getElementById('rows');
+
+function addRow(name = '', odds = '', prob = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="row-name"><input placeholder="如 1:0" value="${name}"></td>
+    <td class="odds"><input type="number" step="0.01" placeholder="6.75" value="${odds}" oninput="calc()"></td>
+    <td class="prob"><input type="number" step="1" placeholder="%" value="${prob}" oninput="calc()"></td>
+    <td class="stake-cell" data-stake>-</td>
+    <td data-return style="text-align:right;color:var(--muted)">-</td>
+    <td data-profit style="text-align:right">-</td>
+    <td style="text-align:center"><button class="del" onclick="this.closest('tr').remove();calc()">×</button></td>`;
+  rows.appendChild(tr);
+  tr.querySelector('.row-name input').addEventListener('input', calc);
+}
+
+function loadScore() {
+  rows.innerHTML = '';
+  [['1:0',6.75],['2:0',7.00],['2:1',6.35],['3:0',11.50],['1:1',7.20]].forEach(r => addRow(r[0], r[1]));
+  calc(); track('load_score');
+}
+
+function loadGoals() {
+  rows.innerHTML = '';
+  [['0球',11.50],['1球',5.00],['2球',3.40],['3球',3.65],['4球',5.30],['5球',9.25],['6球',15.50],['7+球',26.00]].forEach(r => addRow(r[0], r[1]));
+  calc(); track('load_goals');
+}
+
+function clearRows() { rows.innerHTML = ''; addRow(); calc(); }
+
+function calc() {
+  let sumInv = 0;
+  const trs = [...rows.querySelectorAll('tr')];
+  const data = trs.map(tr => {
+    const odds = parseFloat(tr.querySelector('.odds input').value);
+    const prob = parseFloat(tr.querySelector('.prob input').value);
+    return { tr, odds: (odds && odds > 0) ? odds : null, prob: (prob >= 0 ? prob / 100 : null) };
+  });
+  data.forEach(d => { if (d.odds) sumInv += 1 / d.odds; });
+  const valid = data.filter(d => d.odds);
+
+  // 计算每个选项凑 2 的倍数后的投注额
+  let totalStake = 0;
+  if (currentMode === 'budget') {
+    const budget = parseFloat(document.getElementById('budget').value) || 0;
+    const alloc = document.getElementById('alloc').value;
+
+    // 按策略给每个选项一个分配权重
+    let weights = valid.map(d => {
+      if (alloc === 'prob') {
+        return (d.prob != null && d.prob > 0) ? d.prob : 0;
+      } else if (alloc === 'kelly') {
+        // 凯利比例 f = (b·p − q)/b，b=赔率−1，q=1−p；只押有正优势的项
+        if (d.prob == null || d.prob <= 0) return 0;
+        const b = d.odds - 1, p = d.prob, q = 1 - p;
+        const f = (b * p - q) / b;
+        return f > 0 ? f : 0;
+      }
+      return 1 / d.odds; // payout：均衡收回
+    });
+
+    let wSum = weights.reduce((a, b) => a + b, 0);
+    // 权重全 0（如凯利下无正优势项）时，退回均衡收回避免除零
+    if (wSum <= 0) { weights = valid.map(d => 1 / d.odds); wSum = weights.reduce((a, b) => a + b, 0); }
+
+    valid.forEach((d, i) => {
+      const ideal = wSum > 0 ? budget * weights[i] / wSum : 0;
+      let stake = Math.round(ideal / 2) * 2;
+      if (stake < 2 && weights[i] > 0) stake = 2; // 有权重的至少投 2 元
+      if (weights[i] <= 0) stake = 0;             // 无优势项（凯利）可为 0
+      d.stake = stake;
+      totalStake += stake;
+    });
+  } else {
+    // 按目标收回，理想投注额 = target / 赔率，再凑成 2 的倍数
+    const target = parseFloat(document.getElementById('target').value) || 0;
+    valid.forEach(d => {
+      const ideal = target / d.odds;
+      let stake = Math.round(ideal / 2) * 2;
+      if (stake < 2) stake = 2;
+      d.stake = stake;
+      totalStake += stake;
+    });
+  }
+  const target = 1; // 占位，下方逐行显示不再依赖它
+
+  // 凑整后各结果的实际收回与净利
+  data.forEach(d => {
+    const sc = d.tr.querySelector('[data-stake]');
+    const rc = d.tr.querySelector('[data-return]');
+    const pc = d.tr.querySelector('[data-profit]');
+    if (!d.odds || !totalStake) { sc.textContent = '-'; rc.textContent = '-'; pc.textContent = '-'; return; }
+    if (d.stake === 0) { // 该项被策略跳过，不下注
+      sc.textContent = '—'; sc.style.color = 'var(--muted)';
+      rc.textContent = '不下'; pc.textContent = '—';
+      pc.className = ''; pc.style.color = 'var(--muted)'; pc.style.textAlign = 'right';
+      return;
+    }
+    sc.style.color = '';
+    const ret = d.stake * d.odds;
+    const prof = ret - totalStake;
+    sc.textContent = d.stake;
+    rc.textContent = ret.toFixed(1);
+    pc.textContent = (prof >= 0 ? '+' : '') + prof.toFixed(1);
+    pc.className = prof >= 0 ? 'hl-good' : 'hl-bad';
+    pc.style.color = ''; pc.style.textAlign = 'right';
+  });
+
+  // 最差命中：只看实际下注(stake>0)的项
+  const betReturns = valid.filter(d => d.stake > 0).map(d => d.stake * d.odds);
+  const minReturn = betReturns.length ? Math.min(...betReturns) : 0;
+  const worstProfit = minReturn - totalStake;      // 最差命中情况净利
+  const worstMult = totalStake ? minReturn / totalStake : 0;
+  const breakeven = totalStake && minReturn ? totalStake / minReturn : 0; // 保本所需真实概率(按最差)
+
+  document.getElementById('totalStake').textContent = totalStake ? totalStake + ' 元' : '-';
+  document.getElementById('mult').textContent = worstMult ? worstMult.toFixed(2) + ' 倍' : '-';
+  document.getElementById('profit').textContent = totalStake ? (worstProfit >= 0 ? '+' : '') + worstProfit.toFixed(1) + ' 元' : '-';
+  document.getElementById('breakeven').textContent = breakeven ? (breakeven * 100).toFixed(1) + '%' : '-';
+
+  // 期望值：EV = Σ(该项概率 × 该项收回) − 总投入。按每投 100 元归一化。
+  const anyProb = valid.some(d => d.prob != null && d.prob > 0);
+  let sumProb = 0, ev = null;
+  if (anyProb && totalStake) {
+    let expReturn = 0;
+    valid.forEach(d => {
+      const p = d.prob || 0;
+      sumProb += p;
+      expReturn += p * (d.stake * d.odds); // 未命中集合收回=0
+    });
+    const evAbs = expReturn - totalStake;          // 本组绝对期望盈亏
+    ev = (evAbs / totalStake) * 100;               // 归一到每投 100 元
+  }
+  const myProbEl = document.getElementById('myProb');
+  const evEl = document.getElementById('ev');
+  if (anyProb) {
+    myProbEl.textContent = (sumProb * 100).toFixed(0) + '%';
+    myProbEl.className = 'v ' + (sumProb > 1 ? 'hl-bad' : '');
+    evEl.textContent = (ev >= 0 ? '+' : '') + ev.toFixed(1) + ' 元';
+    evEl.className = 'v ' + (ev >= 0 ? 'hl-good' : 'hl-bad');
+  } else {
+    myProbEl.textContent = '-'; myProbEl.className = 'v';
+    evEl.textContent = '-'; evEl.className = 'v';
+  }
+
+  const v = document.getElementById('verdict');
+  if (!totalStake) { v.className = 'verdict bad'; v.textContent = '填入赔率后自动计算。'; return; }
+  const be = (breakeven * 100).toFixed(1);
+
+  if (anyProb) {
+    // 有概率估计：以期望值为准判断
+    const warn = sumProb > 1 ? `<br><span class="hl-bad">⚠ 你填的各项概率之和 ${(sumProb*100).toFixed(0)}% 已超过 100%，不合理，请下调。</span>` : '';
+    if (ev >= 0) {
+      v.className = 'verdict good';
+      v.innerHTML = `按你估的概率，期望值 <b class="hl-good">+${ev.toFixed(1)} 元 / 每投100元</b> → <b>正期望，值得下</b>。<br>（数学平衡线为 ${be}%，你估的命中总概率 ${(sumProb*100).toFixed(0)}% 已越过它。）${warn}`;
+    } else {
+      v.className = 'verdict bad';
+      v.innerHTML = `按你估的概率，期望值 <b class="hl-bad">${ev.toFixed(1)} 元 / 每投100元</b> → <b>长期亏损，不建议下</b>。<br>（需真实命中总概率 &gt; ${be}%，你只估了 ${(sumProb*100).toFixed(0)}%。）${warn}`;
+    }
+    return;
+  }
+
+  // 没填概率：退回按最差命中情况提示平衡线
+  if (worstProfit >= 0) {
+    v.className = 'verdict good';
+    v.innerHTML = `即使命中回报最低的那一项，也能 <b class="hl-good">净赚 ${worstProfit.toFixed(1)} 元</b>（最差 ${worstMult.toFixed(2)} 倍）。<br>只要你判断这组结果真实发生概率 <b>&gt; ${be}%</b>，就是正期望下注。<br><span style="color:var(--muted)">填入每行「我估概率%」可直接算期望值。</span>`;
+  } else {
+    v.className = 'verdict bad';
+    v.innerHTML = `按最差命中情况，保本需真实概率 <b class="hl-bad">&gt; ${be}%</b>。<br>凑整后总投入 ${totalStake} 元，最低命中仅收回 ${minReturn.toFixed(1)} 元，<b>存在亏损项</b>。建议减少选项或改玩总进球数。`;
+  }
+}
+
+let currentMode = 'budget';
+function setMode(m) {
+  currentMode = m;
+  document.getElementById('budgetField').style.display = m === 'budget' ? '' : 'none';
+  document.getElementById('allocField').style.display = m === 'budget' ? '' : 'none';
+  document.getElementById('targetField').style.display = m === 'target' ? '' : 'none';
+  document.getElementById('mBudget').className = 'btn mode-btn' + (m === 'budget' ? '' : ' ghost');
+  document.getElementById('mTarget').className = 'btn mode-btn' + (m === 'target' ? '' : ' ghost');
+  document.getElementById('modeNote').innerHTML = m === 'budget'
+    ? '固定总花费，自动按赔率把钱分到各选项（凑 2 的倍数），让各结果收回尽量拉平。'
+    : '中奖后你想拿回多少钱，投注额按此反推（凑 2 的倍数）。';
+  calc();
+}
+function onAllocChange() {
+  const a = document.getElementById('alloc').value;
+  track('alloc_' + a);
+  const note = document.getElementById('modeNote');
+  if (a === 'prob') {
+    note.innerHTML = '<b>按看好程度</b>：钱正比于「我估概率%」分配 — 越看好投越多。需先填各行概率。收回不再拉平，看好的命中赚更多。';
+  } else if (a === 'kelly') {
+    note.innerHTML = '<b>凯利公式</b>：只押「我估概率 &gt; 隐含概率」的有优势项，按优势大小分配，无优势项显示「不下」。理论最优增长，但依赖你的概率估得准。';
+  } else {
+    note.innerHTML = '<b>均衡收回</b>：钱正比于 1÷赔率 分配，让中任意一项收回尽量相同（不看你的判断）。';
+  }
+  calc();
+}
+document.getElementById('target').addEventListener('input', calc);
+document.getElementById('budget').addEventListener('input', calc);
+setMode('budget');
+loadScore();
+</script>
+</body>
+</html>
