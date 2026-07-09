@@ -5,17 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>竞彩分注计算器 (Dutching)</title>
 
-<!-- ===== 数据埋点 (GoatCounter，免费/隐私合规) =====
-     部署前：把下面 data-goatcounter 里的 YOURCODE 换成你注册的站点代码，
-     形如 https://你的名字.goatcounter.com/count -->
+<!-- ===== 数据埋点 1：GoatCounter（免费/隐私合规） ===== -->
 <script data-goatcounter="https://oraclehe1.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
+
+<!-- ===== 数据埋点 2：Google Analytics 4 =====
+     部署前：把下面两处 G-S7ZJW560JF 换成你的 GA4 衡量 ID -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-S7ZJW560JF"></script>
 <script>
-  // 记录自定义事件（哪个功能被用了），未配置埋点时静默跳过
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-S7ZJW560JF');
+</script>
+
+<script>
+  // 记录自定义事件：同时上报给 GoatCounter 和 GA4，未配置的一方静默跳过
   function track(name) {
     try {
       if (window.goatcounter && window.goatcounter.count) {
         window.goatcounter.count({ path: 'evt/' + name, title: name, event: true });
+      }
+    } catch (e) {}
+    try {
+      if (typeof gtag === 'function') {
+        gtag('event', name);
       }
     } catch (e) {}
   }
