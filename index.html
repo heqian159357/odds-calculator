@@ -127,11 +127,48 @@
     border: 1px solid var(--line); border-radius: 10px;
     padding: 1px 8px; margin-left: 6px; white-space: nowrap;
   }
+  /* 醒目的工具切换横幅 */
+  .switch-banner {
+    display: flex; align-items: center; gap: 12px;
+    background: linear-gradient(135deg, rgba(255,90,90,.18), rgba(245,185,66,.12));
+    border: 1px solid var(--accent); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 16px; text-decoration: none; color: var(--text);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .switch-banner:active { transform: scale(.98); }
+  .switch-banner:hover { box-shadow: 0 4px 16px rgba(255,90,90,.2); }
+  .sb-icon { font-size: 26px; }
+  .sb-text { display: flex; flex-direction: column; flex: 1; }
+  .sb-text b { font-size: 16px; }
+  .sb-text small { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .sb-arrow { font-size: 22px; color: var(--accent); font-weight: 700; }
+  /* ===== 手机适配 ===== */
+  @media (max-width: 560px) {
+    body { padding: 10px; }
+    h1 { font-size: 18px; }
+    .card { padding: 12px; border-radius: 10px; }
+    .field { flex-wrap: wrap; }
+    .field label { width: 100%; margin-bottom: 2px; }
+    .field input, .field select { width: 100%; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 3px; }
+    input { font-size: 16px; }  /* iOS 防止聚焦自动放大 */
+    .btn, .btn.ghost { padding: 12px 14px; font-size: 15px; flex: 1; min-width: 44%; }
+    .btns { gap: 6px; }
+    .result-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat .v { font-size: 18px; }
+    .sb-text b { font-size: 15px; }
+    .sb-icon { font-size: 22px; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div style="margin-bottom:14px"><a href="predictor.html" style="color:var(--accent);font-size:13px;text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:8px;">🎯 精算分析器：找 Value Bet →</a></div>
+  <a class="switch-banner" href="predictor.html">
+    <span class="sb-icon">🎯</span>
+    <span class="sb-text"><b>精算分析器</b><small>算模型概率 · 找 Value Bet · 一键同步过来</small></span>
+    <span class="sb-arrow">→</span>
+  </a>
   <h1>竞彩分注计算器 <span style="font-size:13px;color:var(--muted)">Dutching</span></h1>
   <div class="sub">覆盖一组结果，让「中任意一个」的收回金额相同。核心问题：你的真实概率能不能压过庄家抽水。</div>
 

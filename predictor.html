@@ -66,11 +66,54 @@
   summary{cursor:pointer;color:var(--accent);font-size:13px;}
   .expl{font-size:12.5px;color:var(--muted);margin-top:8px;}
   .expl b{color:var(--text);}
+  /* 醒目切换横幅 */
+  .switch-banner{
+    display:flex;align-items:center;gap:12px;
+    background:linear-gradient(135deg,rgba(255,90,90,.18),rgba(245,185,66,.12));
+    border:1px solid var(--accent);border-radius:12px;
+    padding:14px 16px;margin-bottom:16px;text-decoration:none;color:var(--text);
+    transition:transform .12s,box-shadow .12s;
+  }
+  .switch-banner:active{transform:scale(.98);}
+  .switch-banner:hover{box-shadow:0 4px 16px rgba(255,90,90,.2);}
+  .sb-icon{font-size:26px;}
+  .sb-text{display:flex;flex-direction:column;flex:1;}
+  .sb-text b{font-size:16px;}
+  .sb-text small{color:var(--muted);font-size:12px;margin-top:2px;}
+  .sb-arrow{font-size:22px;color:var(--accent);font-weight:700;}
+  /* 同步按钮做成醒目 CTA */
+  #syncBtn, .btn.cta{width:100%;padding:14px;font-size:16px;}
+  /* ===== 手机适配 ===== */
+  @media (max-width:560px){
+    body{padding:10px;}
+    h1{font-size:17px;}
+    .card{padding:12px;border-radius:10px;}
+    .card h2{font-size:14px;}
+    .field{flex-wrap:wrap;}
+    .field label{width:100%;margin-bottom:2px;}
+    input{font-size:16px;}          /* iOS 防聚焦放大 */
+    .odds-in{width:56px;padding:6px 4px;}
+    .lam-in{width:72px;}
+    table{font-size:12px;}
+    th,td{padding:7px 2px;}
+    th{font-size:11px;}
+    .grid3{gap:6px;}
+    .stat .v{font-size:17px;}
+    .btn{width:100%;padding:13px;font-size:15px;}
+    .sb-text b{font-size:15px;}
+    .sb-icon{font-size:22px;}
+    /* 让宽表格可横向滚动而不撑破布局 */
+    .card{overflow-x:auto;}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="nav"><a href="index.html">← 分注计算器</a></div>
+  <a class="switch-banner" href="index.html">
+    <span class="sb-icon">💰</span>
+    <span class="sb-text"><b>分注计算器</b><small>凯利仓位 · 算每注该投多少 · Dutching 分注</small></span>
+    <span class="sb-arrow">→</span>
+  </a>
   <h1>⚽ 足球精算分析器 <span style="font-size:13px;color:var(--muted)">模型 × 市场 找 Value</span></h1>
   <div class="sub">精算师的做法：把统计模型算的概率，和博彩赔率去抽水后的市场概率对比，只在「模型概率 &gt; 市场概率」处下注。</div>
 
@@ -193,7 +236,7 @@
     <h2>🎯 Value Bet 汇总（模型认为赔率给高了）</h2>
     <div id="valueSummary" class="note">填入赔率后自动计算。</div>
     <div class="btns">
-      <button class="btn" onclick="syncToCalc()">✅ 把勾选的标的同步到分注计算器 →</button>
+      <button class="btn cta" onclick="syncToCalc()">✅ 把勾选的标的同步到分注计算器 →</button>
     </div>
     <div class="note">默认勾选所有 value bet。你也可在上面各表手动勾选任意标的。点同步后跳到分注计算器，自动填入选项+赔率+模型概率，并按凯利算购买建议。</div>
   </div>
