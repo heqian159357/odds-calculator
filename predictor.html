@@ -94,7 +94,7 @@
     </div>
     <div id="wdlMargin" class="margin-warn"></div>
     <table id="wdlTbl"><thead>
-      <tr><th>结果</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th></tr>
+      <tr><th>结果</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th><th>选</th></tr>
     </thead><tbody></tbody></table>
     <div class="grid3" style="margin-top:12px">
       <div class="stat"><div class="k">融合·主胜</div><div class="v" id="fW">-</div></div>
@@ -120,7 +120,7 @@
     </div>
     <div id="goalMargin" class="margin-warn"></div>
     <table id="goalTbl"><thead>
-      <tr><th>进球</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th></tr>
+      <tr><th>进球</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th><th>选</th></tr>
     </thead><tbody></tbody></table>
   </div>
 
@@ -129,7 +129,7 @@
     <h2>④ 精确比分盘</h2>
     <div id="scoreMargin" class="margin-warn"></div>
     <table id="scoreTbl"><thead>
-      <tr><th>比分</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th></tr>
+      <tr><th>比分</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th><th>选</th></tr>
     </thead><tbody></tbody></table>
     <div class="note">只列出有赔率输入的比分。留空的比分不参与。默认已填入西班牙vs比利时的竞彩赔率。</div>
     <details>
@@ -142,6 +142,10 @@
   <div class="card">
     <h2>🎯 Value Bet 汇总（模型认为赔率给高了）</h2>
     <div id="valueSummary" class="note">填入赔率后自动计算。</div>
+    <div class="btns">
+      <button class="btn" onclick="syncToCalc()">✅ 把勾选的标的同步到分注计算器 →</button>
+    </div>
+    <div class="note">默认勾选所有 value bet。你也可在上面各表手动勾选任意标的。点同步后跳到分注计算器，自动填入选项+赔率+模型概率，并按凯利算购买建议。</div>
   </div>
 
   <!-- 方法论 -->
@@ -203,6 +207,24 @@ function devig(obj){
 function evClass(ev){ return ev>0.05?'value':(ev>-0.1?'':'neg'); }
 function evFlag(ev){ return ev>0.05?'<span class="badge v">★VALUE</span>':(ev>-0.1?'尚可':''); }
 
+// 生成一行的勾选框：value bet(ev>0.05) 默认勾选。data-* 存标的信息供同步用
+function cb(name,o,mp,ev){
+  const checked = ev>0.05 ? 'checked' : '';
+  return `<input type="checkbox" class="pick" ${checked} data-name="${name}" data-odds="${o.toFixed(2)}" data-prob="${(mp*100).toFixed(1)}">`;
+}
+
+// 一键同步：把勾选标的写入 localStorage，跳转到分注计算器
+function syncToCalc(){
+  const picks=[];
+  document.querySelectorAll('.pick:checked').forEach(c=>{
+    picks.push({ name:c.dataset.name, odds:parseFloat(c.dataset.odds), prob:parseFloat(c.dataset.prob) });
+  });
+  if(picks.length===0){ alert('还没有勾选任何标的。可在各表右侧「选」列勾选，或保留默认勾选的 value bet。'); return; }
+  localStorage.setItem('dutching_sync', JSON.stringify({ ts:Date.now(), picks }));
+  track('sync_to_calc');
+  location.href='index.html?from=predictor';
+}
+
 function calc(){
   const lh=parseFloat(document.getElementById('lamH').value)||0;
   const la=parseFloat(document.getElementById('lamA').value)||0;
@@ -228,7 +250,8 @@ function calc(){
   ['主胜','平','主负'].forEach(k=>{
     const o=wdlOdds[k], mp=wdlModel[k], ip=wdlDV.probs[k]||0, ev=o?mp*o-1:0;
     if(ev>0.05) valueBets.push({name:'胜平负·'+k,o,mp,ev});
-    wdlBody.innerHTML+=`<tr class="${ev>0.05?'row-star':''}"><td>${k}</td><td>${o?o.toFixed(2):'-'}</td><td>${(mp*100).toFixed(1)}%</td><td>${(ip*100).toFixed(1)}%</td><td class="${evClass(ev)}">${o?(ev>=0?'+':'')+ev.toFixed(2):'-'}</td><td>${o?evFlag(ev):''}</td></tr>`;
+    const label=(k==='主胜'?'胜':k==='主负'?'负':'平');
+    wdlBody.innerHTML+=`<tr class="${ev>0.05?'row-star':''}"><td>${k}</td><td>${o?o.toFixed(2):'-'}</td><td>${(mp*100).toFixed(1)}%</td><td>${(ip*100).toFixed(1)}%</td><td class="${evClass(ev)}">${o?(ev>=0?'+':'')+ev.toFixed(2):'-'}</td><td>${o?evFlag(ev):''}</td><td style="text-align:center">${o?cb(label,o,mp,ev):''}</td></tr>`;
   });
   // 融合 70/30
   const W=0.70;
@@ -256,7 +279,7 @@ function calc(){
   [0,1,2,3,4,5,6,'7+'].forEach(k=>{
     const o=goalOdds[k], mp=goalModel[k]||0, ip=goalDV.probs[k]||0, ev=o?mp*o-1:0;
     if(o&&ev>0.05) valueBets.push({name:'总进球·'+k,o,mp,ev});
-    goalBody.innerHTML+=`<tr class="${o&&ev>0.05?'row-star':''}"><td>${k}球</td><td>${o?o.toFixed(2):'-'}</td><td>${(mp*100).toFixed(1)}%</td><td>${o?(ip*100).toFixed(1)+'%':'-'}</td><td class="${o?evClass(ev):'neg'}">${o?(ev>=0?'+':'')+ev.toFixed(2):'-'}</td><td>${o?evFlag(ev):''}</td></tr>`;
+    goalBody.innerHTML+=`<tr class="${o&&ev>0.05?'row-star':''}"><td>${k}球</td><td>${o?o.toFixed(2):'-'}</td><td>${(mp*100).toFixed(1)}%</td><td>${o?(ip*100).toFixed(1)+'%':'-'}</td><td class="${o?evClass(ev):'neg'}">${o?(ev>=0?'+':'')+ev.toFixed(2):'-'}</td><td>${o?evFlag(ev):''}</td><td style="text-align:center">${o?cb('总进球'+k,o,mp,ev):''}</td></tr>`;
   });
 
   // --- 比分 ---
@@ -279,7 +302,7 @@ function calc(){
   rows.sort((a,b)=>b.ev-a.ev);
   const scoreBody=document.querySelector('#scoreTbl tbody'); scoreBody.innerHTML='';
   rows.forEach(r=>{
-    scoreBody.innerHTML+=`<tr class="${r.ev>0.05?'row-star':''}"><td>${r.s}</td><td>${r.o.toFixed(2)}</td><td>${(r.mp*100).toFixed(1)}%</td><td>${(r.ip*100).toFixed(1)}%</td><td class="${evClass(r.ev)}">${(r.ev>=0?'+':'')+r.ev.toFixed(2)}</td><td>${evFlag(r.ev)}</td></tr>`;
+    scoreBody.innerHTML+=`<tr class="${r.ev>0.05?'row-star':''}"><td>${r.s}</td><td>${r.o.toFixed(2)}</td><td>${(r.mp*100).toFixed(1)}%</td><td>${(r.ip*100).toFixed(1)}%</td><td class="${evClass(r.ev)}">${(r.ev>=0?'+':'')+r.ev.toFixed(2)}</td><td>${evFlag(r.ev)}</td><td style="text-align:center">${cb(r.s,r.o,r.mp,r.ev)}</td></tr>`;
   });
 
   // --- value 汇总 ---
