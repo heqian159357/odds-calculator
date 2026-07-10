@@ -102,6 +102,17 @@
   .hl-bad { color: var(--bad); }
   .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
   .stake-cell { color: var(--accent); font-weight: 600; }
+  .stake-in {
+    text-align: right; font-weight: 600; color: var(--accent);
+    padding: 6px 8px; width: 100%;
+  }
+  .stake-in[readonly] {
+    background: transparent; border-color: transparent;
+    cursor: default; -moz-appearance: textfield;
+  }
+  .stake-in[readonly]::-webkit-outer-spin-button,
+  .stake-in[readonly]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .stake-in:not([readonly]) { background: var(--input); border-color: var(--accent); }
   .strat { border-left: 3px solid var(--line); padding: 4px 0 4px 12px; margin-bottom: 14px; }
   .strat-h { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
   .strat-f {
@@ -137,10 +148,11 @@
     </div>
     <div class="field" id="allocField">
       <label>分配策略</label>
-      <select id="alloc" onchange="onAllocChange()">
+      <select id="alloc" onchange="onAllocChange(true)">
         <option value="payout">均衡收回（不看我的判断）</option>
         <option value="prob">按我看好程度（正比于我估的概率）</option>
         <option value="kelly">凯利公式（按优势下注，进阶）</option>
+        <option value="manual">✍️ 手动输入（我自己填每注金额）</option>
       </select>
     </div>
     <div class="field" id="targetField" style="display:none">
@@ -215,7 +227,7 @@ function addRow(name = '', odds = '', prob = '') {
     <td class="row-name"><input placeholder="如 1:0" value="${name}"></td>
     <td class="odds"><input type="number" step="0.01" placeholder="6.75" value="${odds}" oninput="calc()"></td>
     <td class="prob"><input type="number" step="1" placeholder="%" value="${prob}" oninput="calc()"></td>
-    <td class="stake-cell" data-stake>-</td>
+    <td class="stake-cell"><input class="stake-in" type="number" step="2" min="0" placeholder="-" data-stake readonly oninput="calc()"></td>
     <td data-return style="text-align:right;color:var(--muted)">-</td>
     <td data-profit style="text-align:right">-</td>
     <td style="text-align:center"><button class="del" onclick="this.closest('tr').remove();calc()">×</button></td>`;
@@ -251,9 +263,18 @@ function calc() {
   // 计算每个选项凑 2 的倍数后的投注额
   let totalStake = 0;
   let budget = 0; // 预算模式下的设定额度，供下方差额提示使用
-  if (currentMode === 'budget') {
+  const alloc = currentMode === 'budget' ? document.getElementById('alloc').value : '';
+  const isManual = alloc === 'manual';
+
+  if (isManual) {
+    // 手动模式：投注额直接读用户在每行输入框里填的值，系统不覆盖
+    valid.forEach(d => {
+      const v = parseFloat(d.tr.querySelector('[data-stake]').value);
+      d.stake = (v && v > 0) ? v : 0;
+      totalStake += d.stake;
+    });
+  } else if (currentMode === 'budget') {
     budget = parseFloat(document.getElementById('budget').value) || 0;
-    const alloc = document.getElementById('alloc').value;
 
     // 按策略给每个选项一个分配权重
     let weights = valid.map(d => {
@@ -294,22 +315,27 @@ function calc() {
   }
   const target = 1; // 占位，下方逐行显示不再依赖它
 
-  // 凑整后各结果的实际收回与净利
+  // 各结果的实际收回与净利
   data.forEach(d => {
-    const sc = d.tr.querySelector('[data-stake]');
+    const sc = d.tr.querySelector('[data-stake]');  // 投注额输入框
     const rc = d.tr.querySelector('[data-return]');
     const pc = d.tr.querySelector('[data-profit]');
-    if (!d.odds || !totalStake) { sc.textContent = '-'; rc.textContent = '-'; pc.textContent = '-'; return; }
-    if (d.stake === 0) { // 该项被策略跳过，不下注
-      sc.textContent = '—'; sc.style.color = 'var(--muted)';
-      rc.textContent = '不下'; pc.textContent = '—';
+    // 手动模式：输入框可编辑、不覆盖；自动模式：写入计算值并设为只读
+    if (isManual) {
+      sc.readOnly = false;
+    } else {
+      sc.readOnly = true;
+      sc.value = (d.odds && d.stake > 0) ? d.stake : '';
+    }
+    if (!d.odds || !totalStake) { rc.textContent = '-'; pc.textContent = '-'; return; }
+    if (d.stake === 0) { // 未下注（策略跳过 或 手动填 0/空）
+      if (!isManual) sc.value = '';
+      rc.textContent = isManual ? '未填' : '不下'; pc.textContent = '—';
       pc.className = ''; pc.style.color = 'var(--muted)'; pc.style.textAlign = 'right';
       return;
     }
-    sc.style.color = '';
     const ret = d.stake * d.odds;
     const prof = ret - totalStake;
-    sc.textContent = d.stake;
     rc.textContent = ret.toFixed(1);
     pc.textContent = (prof >= 0 ? '+' : '') + prof.toFixed(1);
     pc.className = prof >= 0 ? 'hl-good' : 'hl-bad';
@@ -323,7 +349,7 @@ function calc() {
   const worstMult = totalStake ? minReturn / totalStake : 0;
   const breakeven = totalStake && minReturn ? totalStake / minReturn : 0; // 保本所需真实概率(按最差)
 
-  document.getElementById('totalStake').textContent = totalStake ? totalStake + ' 元' : '-';
+  document.getElementById('totalStake').textContent = totalStake ? (Number.isInteger(totalStake) ? totalStake : totalStake.toFixed(1)) + ' 元' : '-';
 
   // 差额提示：预算模式下，实际总投入因凑 2 的倍数/凯利跳过可能≠设定预算
   const diffEl = document.getElementById('stakeDiff');
@@ -407,19 +433,25 @@ function setMode(m) {
   document.getElementById('targetField').style.display = m === 'target' ? '' : 'none';
   document.getElementById('mBudget').className = 'btn mode-btn' + (m === 'budget' ? '' : ' ghost');
   document.getElementById('mTarget').className = 'btn mode-btn' + (m === 'target' ? '' : ' ghost');
-  document.getElementById('modeNote').innerHTML = m === 'budget'
-    ? '固定总花费，自动按赔率把钱分到各选项（凑 2 的倍数），让各结果收回尽量拉平。'
-    : '中奖后你想拿回多少钱，投注额按此反推（凑 2 的倍数）。';
-  calc();
+  if (m === 'budget') {
+    onAllocChange(); // 由分配策略决定 note 文案与预算框显隐
+  } else {
+    document.getElementById('modeNote').innerHTML = '中奖后你想拿回多少钱，投注额按此反推（凑 2 的倍数）。';
+    calc();
+  }
 }
-function onAllocChange() {
+function onAllocChange(fromUser) {
   const a = document.getElementById('alloc').value;
-  track('alloc_' + a);
+  if (fromUser) track('alloc_' + a);
   const note = document.getElementById('modeNote');
+  // 手动模式不需要总预算输入，隐藏它
+  document.getElementById('budgetField').style.display = (a === 'manual') ? 'none' : '';
   if (a === 'prob') {
     note.innerHTML = '<b>按看好程度</b>：钱正比于「我估概率%」分配 — 越看好投越多。需先填各行概率。收回不再拉平，看好的命中赚更多。';
   } else if (a === 'kelly') {
     note.innerHTML = '<b>凯利公式</b>：只押「我估概率 &gt; 隐含概率」的有优势项，按优势大小分配，无优势项显示「不下」。理论最优增长，但依赖你的概率估得准。';
+  } else if (a === 'manual') {
+    note.innerHTML = '<b>✍️ 手动输入</b>：投注额那一列可直接编辑，你自己填每注金额（建议 2 的倍数），系统实时算出每项收回、净利、总投入和期望值。';
   } else {
     note.innerHTML = '<b>均衡收回</b>：钱正比于 1÷赔率 分配，让中任意一项收回尽量相同（不看你的判断）。';
   }
