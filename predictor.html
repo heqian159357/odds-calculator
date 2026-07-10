@@ -80,7 +80,57 @@
     <div class="field"><label>主队预期进球 λ₁</label><input class="lam-in" id="lamH" type="number" step="0.05" value="1.35"></div>
     <div class="field"><label>客队预期进球 λ₂</label><input class="lam-in" id="lamA" type="number" step="0.05" value="0.67"></div>
     <div class="field"><label>低分修正 ρ (Dixon-Coles)</label><input class="lam-in" id="rho" type="number" step="0.01" value="-0.08"></div>
-    <div class="note">λ = 该队本场预期进几个球。可用「场均进球 × 对手防守强度」估。ρ 修正低比分(0:0/1:0/1:1)相关性，一般取 -0.03~-0.12。默认值为西班牙vs比利时的估计。</div>
+    <div class="note">λ = 该队本场预期进几个球。这是唯一需要你判断的输入。不会算？↓用下面的估算器。ρ 修正低比分相关性，一般 -0.03~-0.12。</div>
+  </div>
+
+  <!-- λ 快速估算器 -->
+  <div class="card">
+    <h2>🧮 λ 快速估算器 <span style="font-size:12px;color:var(--muted)">填近期进/失球，自动算 λ</span></h2>
+    <table style="font-size:13px">
+      <thead><tr><th></th><th>近N场进球</th><th>近N场失球</th><th>场次N</th></tr></thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--muted)">主队</td>
+          <td><input class="odds-in" id="hGF" type="number" step="1" value="9" oninput="estLambda()"></td>
+          <td><input class="odds-in" id="hGA" type="number" step="1" value="0" oninput="estLambda()"></td>
+          <td><input class="odds-in" id="hN" type="number" step="1" value="5" oninput="estLambda()"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--muted)">客队</td>
+          <td><input class="odds-in" id="aGF" type="number" step="1" value="12" oninput="estLambda()"></td>
+          <td><input class="odds-in" id="aGA" type="number" step="1" value="5" oninput="estLambda()"></td>
+          <td><input class="odds-in" id="aN" type="number" step="1" value="5" oninput="estLambda()"></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="field" style="margin-top:10px">
+      <label>主场系数</label>
+      <select id="homeAdv" onchange="estLambda()" style="background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:13px;width:auto">
+        <option value="1.0">中立场 (世界杯淘汰赛) ×1.0</option>
+        <option value="1.1">主队有主场 ×1.1</option>
+        <option value="0.95">主队实为客场 ×0.95</option>
+      </select>
+      <label style="width:auto;margin-left:8px">向均值收缩</label>
+      <select id="shrink" onchange="estLambda()" style="background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:13px;width:auto">
+        <option value="0.30">30% (样本少/极端,推荐)</option>
+        <option value="0.15">15% (样本较可靠)</option>
+        <option value="0">0% (纯数据,不收缩)</option>
+      </select>
+    </div>
+    <div id="lamResult" class="note" style="margin-top:10px"></div>
+    <div class="btns">
+      <button class="btn" onclick="applyLambda()">↑ 应用到上面的 λ 并计算</button>
+    </div>
+    <details>
+      <summary>公式说明</summary>
+      <div class="expl">
+        <b>基准</b> = (主队场均进+主队场均失+客队场均进+客队场均失) ÷ 4，作为"赛事平均单队进球"。<br>
+        <b>主队进攻力</b> = 主队场均进球 ÷ 基准；<b>客队防守漏洞</b> = 客队场均失球 ÷ 基准。<br>
+        <b>λ₁</b> = 基准 × 主队进攻力 × 客队防守漏洞 × 主场系数。λ₂ 同理对称。<br>
+        <b>收缩</b>：把攻/守强度按比例拉回 1.0（平均水平），样本少时防止极端值（如全胜0失球）导致过拟合。<br>
+        <b>时间衰减</b>：此处用近N场汇总（等权简化）；完整版可对每场加 0.85ⁿ 权重。
+      </div>
+    </details>
   </div>
 
   <!-- 胜平负 -->
@@ -262,6 +312,46 @@ function syncToCalc(){
   location.href='index.html?from=predictor';
 }
 
+// ---- λ 快速估算器 ----
+let _estLamH=null, _estLamA=null;
+function estLambda(){
+  const hGF=parseFloat(document.getElementById('hGF').value)||0;
+  const hGA=parseFloat(document.getElementById('hGA').value)||0;
+  const hN =parseFloat(document.getElementById('hN').value)||1;
+  const aGF=parseFloat(document.getElementById('aGF').value)||0;
+  const aGA=parseFloat(document.getElementById('aGA').value)||0;
+  const aN =parseFloat(document.getElementById('aN').value)||1;
+  const homeAdv=parseFloat(document.getElementById('homeAdv').value)||1;
+  const shk=parseFloat(document.getElementById('shrink').value)||0;
+
+  // 场均
+  const h_gf=hGF/hN, h_ga=hGA/hN, a_gf=aGF/aN, a_ga=aGA/aN;
+  // 基准 = 四个场均的平均
+  const base=(h_gf+h_ga+a_gf+a_ga)/4;
+  if(base<=0){ document.getElementById('lamResult').textContent='请填入有效的进球数据。'; return; }
+  // 强度 = 场均 / 基准
+  const shrink=x=>x*(1-shk)+1.0*shk; // 向均值1.0收缩
+  const hAtt=shrink(h_gf/base), hDef=shrink(h_ga/base);
+  const aAtt=shrink(a_gf/base), aDef=shrink(a_ga/base);
+  // λ = 基准 × 本队攻 × 对手守 × 主场
+  const awayAdv=(homeAdv===1)?1:(2-homeAdv); // 主队加成的镜像：1.1→0.9，中立1.0→1.0
+  const lamH=base*hAtt*aDef*homeAdv;
+  const lamA=base*aAtt*hDef*awayAdv;
+  _estLamH=lamH; _estLamA=lamA;
+  document.getElementById('lamResult').innerHTML=
+    `基准场均 <b>${base.toFixed(2)}</b> ｜ 主队 攻<b>${hAtt.toFixed(2)}</b>/守<b>${hDef.toFixed(2)}</b>，客队 攻<b>${aAtt.toFixed(2)}</b>/守<b>${aDef.toFixed(2)}</b><br>
+    → 估算 <b style="color:var(--good)">λ₁ = ${lamH.toFixed(2)}</b> ，<b style="color:var(--good)">λ₂ = ${lamA.toFixed(2)}</b>（点下方按钮应用）`;
+}
+function applyLambda(){
+  if(_estLamH==null){ estLambda(); }
+  if(_estLamH==null) return;
+  document.getElementById('lamH').value=_estLamH.toFixed(2);
+  document.getElementById('lamA').value=_estLamA.toFixed(2);
+  track('apply_lambda');
+  calc();
+  document.getElementById('lamResult').innerHTML+='<br><span style="color:var(--good)">✅ 已应用，下方所有盘口已按新 λ 重算。</span>';
+}
+
 function calc(){
   const lh=parseFloat(document.getElementById('lamH').value)||0;
   const la=parseFloat(document.getElementById('lamA').value)||0;
@@ -354,6 +444,7 @@ function calc(){
       '<div class="note" style="margin-top:8px">拿这些标的去 <a href="index.html" style="color:var(--accent)">分注计算器</a>，用凯利公式算最优投注额（建议半凯利降波动）。EV 是长期期望，单场仍有波动，务必控制仓位。</div>';
   }
 }
+estLambda();
 calc();
 track('open_predictor');
 </script>
