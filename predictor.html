@@ -213,6 +213,34 @@ function cb(name,o,mp,ev){
   return `<input type="checkbox" class="pick" ${checked} data-name="${name}" data-odds="${o.toFixed(2)}" data-prob="${(mp*100).toFixed(1)}">`;
 }
 
+// 检测勾选标的间的重叠（同一结果被重复押注，会让凯利仓位失真）
+function findOverlaps(picks){
+  const warns=[];
+  const names=picks.map(p=>p.name);
+  const has=n=>names.includes(n);
+  // 1) 比分 i:j 被 总进球(i+j) 包含
+  picks.forEach(p=>{
+    const m=p.name.match(/^(\d+):(\d+)$/);
+    if(m){
+      const tot=(+m[1])+(+m[2]);
+      const g='总进球'+(tot>=7?'7+':tot);
+      if(has(g)) warns.push(`「比分 ${p.name}」⊂「${g}」——${p.name} 已包含在总进球${tot>=7?'7+':tot}里`);
+    }
+  });
+  // 2) 比分 i:j 被 胜平负 包含
+  picks.forEach(p=>{
+    const m=p.name.match(/^(\d+):(\d+)$/);
+    if(m){
+      const i=+m[1],j=+m[2];
+      const r=i>j?'胜':(i<j?'负':'平');
+      if(has(r)) warns.push(`「比分 ${p.name}」⊂「${r}」——${p.name} 已包含在胜平负的「${r}」里`);
+    }
+  });
+  // 3) 总进球0 与 胜平负「平」重叠(0球必是0:0即平)
+  if(has('总进球0') && has('平')) warns.push('「总进球0」与「平」重叠——0球必然是平局');
+  return warns;
+}
+
 // 一键同步：把勾选标的写入 localStorage，跳转到分注计算器
 function syncToCalc(){
   const picks=[];
@@ -220,6 +248,15 @@ function syncToCalc(){
     picks.push({ name:c.dataset.name, odds:parseFloat(c.dataset.odds), prob:parseFloat(c.dataset.prob) });
   });
   if(picks.length===0){ alert('还没有勾选任何标的。可在各表右侧「选」列勾选，或保留默认勾选的 value bet。'); return; }
+
+  const warns=findOverlaps(picks);
+  if(warns.length){
+    const msg='⚠ 检测到重叠标的（对同一结果重复押注，会让凯利仓位失真）：\n\n'
+      + warns.map((w,i)=>(i+1)+'. '+w).join('\n')
+      + '\n\n建议同类重叠的只保留一个（本场优先选抽水更浅的总进球盘）。\n\n点「确定」仍按现状同步，「取消」返回修改勾选。';
+    if(!confirm(msg)){ track('sync_overlap_cancel'); return; }
+    track('sync_overlap_ignore');
+  }
   localStorage.setItem('dutching_sync', JSON.stringify({ ts:Date.now(), picks }));
   track('sync_to_calc');
   location.href='index.html?from=predictor';
