@@ -84,6 +84,16 @@
   .odds-warn{background:rgba(245,185,66,.12);border:1px solid var(--gold);color:var(--text);
     border-radius:10px;padding:11px 14px;font-size:13px;margin-bottom:16px;line-height:1.5;}
   .odds-warn b{color:var(--gold);}
+  /* 预测结论卡 */
+  .predict-card{border:1px solid var(--good);background:linear-gradient(135deg,rgba(53,196,106,.10),rgba(53,196,106,.03));}
+  .pred-top3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0;}
+  .pred-item{background:var(--input);border-radius:10px;padding:14px 8px;text-align:center;border:1px solid var(--line);}
+  .pred-item.rank1{border-color:var(--good);}
+  .pred-score{font-size:26px;font-weight:800;letter-spacing:1px;}
+  .pred-prob{font-size:13px;color:var(--good);margin-top:4px;font-weight:600;}
+  .pred-rank{font-size:11px;color:var(--muted);}
+  .pred-line{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line);}
+  .pred-line b{color:var(--text);}
   /* 同步按钮做成醒目 CTA */
   #syncBtn, .btn.cta{width:100%;padding:14px;font-size:16px;}
   /* ===== 手机适配 ===== */
@@ -121,6 +131,18 @@
   <div class="sub">精算师的做法：把统计模型算的概率，和博彩赔率去抽水后的市场概率对比，只在「模型概率 &gt; 市场概率」处下注。</div>
 
   <div class="odds-warn">⚠️ 页面内赔率为示例/历史值，<b>并非实时</b>。赔率随时变动，请以你下注平台的<b>当前赔率</b>为准，逐项核对输入后结果才可靠。</div>
+
+  <!-- 🔮 预测结论（结论优先，最醒目） -->
+  <div class="card predict-card">
+    <h2>🔮 比分预测 <span style="font-size:12px;color:var(--muted)" id="predMatchName"></span></h2>
+    <div id="predBody">
+      <div class="note">拉取赔率或手填后，点下方「用赔率反推 λ 并预测」，这里显示最可能的 3 个比分。</div>
+    </div>
+    <div class="btns">
+      <button class="btn cta" onclick="predictFromOdds()">🎯 用赔率反推 λ 并预测比分</button>
+    </div>
+    <div id="predMeta" class="note"></div>
+  </div>
 
   <!-- 自动拉取赔率 -->
   <div class="card">
@@ -436,10 +458,102 @@ function applyMatchOdds(){
     document.getElementById('oD').value=(h2h['D']/h2hN).toFixed(2);
     document.getElementById('oL').value=(h2h['A']/h2hN).toFixed(2);
   }
+  // 大小球：取最主流盘线(通常2.5)的 Over/Under 均值，存入全局供 λ 求解器用
+  _mktTotals=null;
+  const byLine={};
+  for(const key in tot){ const [side,pt]=key.split('_'); byLine[pt]=byLine[pt]||{}; byLine[pt][side]=tot[key]/totN[key]; }
+  // 选最接近 2.5 的盘线
+  let best=null,bd=99;
+  for(const pt in byLine){ if(byLine[pt].Over&&byLine[pt].Under){ const dd=Math.abs(+pt-2.5); if(dd<bd){bd=dd;best=pt;} } }
+  if(best){ _mktTotals={line:+best, over:byLine[best].Over, under:byLine[best].Under}; }
+
+  _predMatchName=`${m.home_team} vs ${m.away_team}`;
+  document.getElementById('predMatchName').textContent=_predMatchName;
   calc();
   document.getElementById('apiStatus').innerHTML=
-    `✅ 已填入「${m.home_team} vs ${m.away_team}」的胜平负赔率（多家均值）。<br><span style="color:var(--muted)">注：The Odds API 的 totals 是「大/小 X球」盘，与竞彩「总进球数(0/1/2…)」口径不同，未自动填；比分盘 API 不提供。这两项请按竞彩 App 手填。</span>`;
+    `✅ 已填入「${m.home_team} vs ${m.away_team}」胜平负赔率${_mktTotals?`＋大小球盘(O/U ${_mktTotals.line})`:''}（多家均值）。<br><span style="color:var(--good)">👉 现在点顶部「🎯 用赔率反推 λ 并预测比分」看结论。</span>`;
   track('api_apply_odds');
+}
+let _mktTotals=null, _predMatchName='';
+
+// ==== 用赔率反推 λ（精算核心：市场赔率是最好的 λ 数据源）====
+// 给定 λ1,λ2,ρ，算模型的 胜/平/负 及 P(总进球>line)
+function modelProbsFor(lh,la,rho,line){
+  let g=[],t=0;
+  for(let i=0;i<MAX;i++){g[i]=[];for(let j=0;j<MAX;j++){g[i][j]=pois(lh,i)*pois(la,j)*tau(i,j,lh,la,rho);t+=g[i][j];}}
+  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)g[i][j]/=t;
+  let w=0,dr=0,l=0,over=0;
+  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){
+    if(i>j)w+=g[i][j];else if(i===j)dr+=g[i][j];else l+=g[i][j];
+    if(line!=null && i+j>line) over+=g[i][j];
+  }
+  return {w,dr,l,over,grid:g};
+}
+// 网格搜索求解最拟合市场的 λ1,λ2
+function solveLambda(mW,mD,mL,mOver,line,rho){
+  let best=null,bestErr=1e9;
+  // 两阶段搜索：粗搜 + 细搜
+  function search(lo1,hi1,lo2,hi2,step){
+    for(let l1=lo1;l1<=hi1;l1+=step){
+      for(let l2=lo2;l2<=hi2;l2+=step){
+        const p=modelProbsFor(l1,l2,rho,line);
+        // 误差 = 胜平负差异平方和 + 大小球差异(有则计)
+        let err=(p.w-mW)**2+(p.dr-mD)**2+(p.l-mL)**2;
+        if(mOver!=null) err+=(p.over-mOver)**2;
+        if(err<bestErr){bestErr=err;best={l1,l2};}
+      }
+    }
+  }
+  search(0.2,3.5,0.2,3.5,0.1);            // 粗搜
+  search(Math.max(0.1,best.l1-0.15),best.l1+0.15,Math.max(0.1,best.l2-0.15),best.l2+0.15,0.02); // 细搜
+  return {...best,err:bestErr};
+}
+
+function predictFromOdds(){
+  const oW=parseFloat(document.getElementById('oW').value),
+        oD=parseFloat(document.getElementById('oD').value),
+        oL=parseFloat(document.getElementById('oL').value);
+  if(!oW||!oD||!oL){ alert('缺少胜平负赔率。请先自动拉取或手填 ② 胜平负盘 的赔率。'); return; }
+  const rho=parseFloat(document.getElementById('rho').value)||-0.08;
+  // 去抽水得市场概率
+  const dv=devig({H:oW,D:oD,A:oL});
+  const mW=dv.probs.H, mD=dv.probs.D, mL=dv.probs.A;
+  // 大小球（若有）去抽水
+  let mOver=null, line=null;
+  if(_mktTotals){ const t=devig({O:_mktTotals.over,U:_mktTotals.under}); mOver=t.probs.O; line=_mktTotals.line; }
+
+  const sol=solveLambda(mW,mD,mL,mOver,line,rho);
+  // 应用求解出的 λ
+  document.getElementById('lamH').value=sol.l1.toFixed(2);
+  document.getElementById('lamA').value=sol.l2.toFixed(2);
+  calc();
+
+  // 用求解 λ 生成比分矩阵，取 Top3
+  const p=modelProbsFor(sol.l1,sol.l2,rho,line);
+  const scores=[];
+  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++) scores.push({s:i+':'+j,p:p.grid[i][j]});
+  scores.sort((a,b)=>b.p-a.p);
+  const top3=scores.slice(0,3);
+
+  // 渲染结论
+  const homeName=_predMatchName?_predMatchName.split(' vs ')[0]:'主队';
+  const awayName=_predMatchName?_predMatchName.split(' vs ')[1]:'客队';
+  const html=
+    `<div class="pred-top3">`+
+    top3.map((t,i)=>`<div class="pred-item ${i===0?'rank1':''}">
+      <div class="pred-rank">第${i+1}可能</div>
+      <div class="pred-score">${t.s}</div>
+      <div class="pred-prob">${(t.p*100).toFixed(1)}%</div>
+    </div>`).join('')+
+    `</div>`+
+    `<div class="pred-line"><span>预期进球 λ</span><b>${homeName} ${sol.l1.toFixed(2)} · ${awayName} ${sol.l2.toFixed(2)}</b></div>`+
+    `<div class="pred-line"><span>赛果概率</span><b>${homeName}胜 ${(p.w*100).toFixed(0)}% · 平 ${(p.dr*100).toFixed(0)}% · ${awayName}胜 ${(p.l*100).toFixed(0)}%</b></div>`+
+    (mOver!=null?`<div class="pred-line"><span>大小球拟合(O ${line})</span><b>模型 ${(p.over*100).toFixed(0)}% vs 市场 ${(mOver*100).toFixed(0)}%</b></div>`:'');
+  document.getElementById('predBody').innerHTML=html;
+  document.getElementById('predMeta').innerHTML=
+    `λ 由市场赔率反推（去抽水后拟合胜平负${mOver!=null?'＋大小球':''}），拟合误差 ${sol.err.toFixed(4)}。`+
+    `<br><span style="color:var(--muted)">原理：市场赔率已聚合伤停/状态等全部信息，反推出的 λ 比手填近期数据更可靠。此为国际盘预测，竞彩下注仍需核对竞彩赔率。</span>`;
+  track('predict_from_odds');
 }
 // 记住上次用的代理地址
 (function(){ const b=localStorage.getItem('apiBase'); if(b) document.getElementById('apiBase').value=b; })();
