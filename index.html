@@ -45,6 +45,7 @@
     --good: #35c46a;
     --bad: #ff5a5a;
     --input: #23272f;
+    --gold: #f5b942;
   }
   * { box-sizing: border-box; }
   body {
@@ -142,6 +143,12 @@
   .sb-text b { font-size: 16px; }
   .sb-text small { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .sb-arrow { font-size: 22px; color: var(--accent); font-weight: 700; }
+  .odds-warn {
+    background: rgba(245,185,66,.12); border: 1px solid var(--gold, #f5b942);
+    color: var(--text); border-radius: 10px; padding: 11px 14px;
+    font-size: 13px; margin-bottom: 16px; line-height: 1.5;
+  }
+  .odds-warn b { color: var(--gold, #f5b942); }
   /* ===== 手机适配 ===== */
   @media (max-width: 560px) {
     body { padding: 10px; }
@@ -151,7 +158,7 @@
     .field label { width: 100%; margin-bottom: 2px; }
     .field input, .field select { width: 100%; }
     table { font-size: 13px; }
-    th, td { padding: 8px 3px; }
+    th, td { padding: 8px 2px; }
     input { font-size: 16px; }  /* iOS 防止聚焦自动放大 */
     .btn, .btn.ghost { padding: 12px 14px; font-size: 15px; flex: 1; min-width: 44%; }
     .btns { gap: 6px; }
@@ -159,6 +166,17 @@
     .stat .v { font-size: 18px; }
     .sb-text b { font-size: 15px; }
     .sb-icon { font-size: 22px; }
+    /* 手机上隐藏「命中收回」列，把空间让给赔率，只保留净利 */
+    .col-return { display: none; }
+    /* 表格各输入框占满单元格，赔率完整可见 */
+    #tbl td input { width: 100%; padding: 8px 4px; }
+    #tbl .row-name input { padding: 8px 4px; }
+    /* 重新分配列宽：赔率、投注额更宽 */
+    #tbl th:nth-child(1), #tbl td:nth-child(1) { width: 24%; }  /* 选项 */
+    #tbl th:nth-child(2), #tbl td:nth-child(2) { width: 22%; }  /* 赔率 */
+    #tbl th:nth-child(3), #tbl td:nth-child(3) { width: 18%; }  /* 概率 */
+    #tbl th:nth-child(4), #tbl td:nth-child(4) { width: 22%; }  /* 投注额 */
+    #tbl th:nth-child(6), #tbl td:nth-child(6) { width: 14%; }  /* 净利 */
   }
 </style>
 </head>
@@ -171,6 +189,8 @@
   </a>
   <h1>竞彩分注计算器 <span style="font-size:13px;color:var(--muted)">Dutching</span></h1>
   <div class="sub">覆盖一组结果，让「中任意一个」的收回金额相同。核心问题：你的真实概率能不能压过庄家抽水。</div>
+
+  <div class="odds-warn">⚠️ 赔率会实时变动，本工具内为示例/历史值，<b>务必以你下注平台当前赔率为准，逐项核对后再填入</b>，否则计算结果不可靠。</div>
 
   <div class="card">
     <div class="field">
@@ -203,7 +223,7 @@
   <div class="card">
     <table id="tbl">
       <thead>
-        <tr><th style="width:22%">选项</th><th style="width:14%">赔率</th><th style="width:15%">我估概率%</th><th style="width:16%">投注额</th><th style="width:16%">命中收回</th><th style="width:12%">净利</th><th style="width:5%"></th></tr>
+        <tr><th style="width:20%">选项</th><th style="width:16%">赔率</th><th style="width:14%">概率%</th><th style="width:16%">投注额</th><th class="col-return" style="width:16%">命中收回</th><th style="width:13%">净利</th><th style="width:5%"></th></tr>
       </thead>
       <tbody id="rows"></tbody>
     </table>
@@ -266,7 +286,7 @@ function addRow(name = '', odds = '', prob = '') {
     <td class="odds"><input type="number" step="0.01" placeholder="6.75" value="${odds}" oninput="calc()"></td>
     <td class="prob"><input type="number" step="1" placeholder="%" value="${prob}" oninput="calc()"></td>
     <td class="stake-cell"><input class="stake-in" type="number" step="2" min="0" placeholder="-" data-stake readonly oninput="calc()"></td>
-    <td data-return style="text-align:right;color:var(--muted)">-</td>
+    <td data-return class="col-return" style="text-align:right;color:var(--muted)">-</td>
     <td data-profit style="text-align:right">-</td>
     <td style="text-align:center"><button class="del" onclick="this.closest('tr').remove();calc()">×</button></td>`;
   rows.appendChild(tr);
