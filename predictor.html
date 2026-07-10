@@ -122,6 +122,28 @@
 
   <div class="odds-warn">⚠️ 页面内赔率为示例/历史值，<b>并非实时</b>。赔率随时变动，请以你下注平台的<b>当前赔率</b>为准，逐项核对输入后结果才可靠。</div>
 
+  <!-- 自动拉取赔率 -->
+  <div class="card">
+    <h2>🌐 自动拉取赔率 <span style="font-size:12px;color:var(--muted)">The Odds API（国际盘·参考）</span></h2>
+    <div class="field">
+      <label>数据代理地址</label>
+      <input id="apiBase" type="text" placeholder="https://odds-proxy.xxx.workers.dev" style="width:100%;flex:1" value="">
+    </div>
+    <div class="btns">
+      <button class="btn ghost" onclick="fetchSports()">① 列出赛事</button>
+      <select id="sportSel" style="background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:13px;flex:1;min-width:160px" onchange="fetchMatches()">
+        <option value="">— 选赛事 —</option>
+      </select>
+    </div>
+    <div class="field" style="margin-top:8px">
+      <select id="matchSel" style="background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:13px;width:100%" onchange="applyMatchOdds()">
+        <option value="">— 选比赛（含胜平负/大小球赔率）—</option>
+      </select>
+    </div>
+    <div id="apiStatus" class="note"></div>
+    <div class="note">按需部署代理（见仓库 <b>worker/README.md</b>）。拉来的是<b>国际博彩盘</b>，仅作模型参考；比分盘 The Odds API 不提供，仍需手填竞彩赔率。免费额度 500 次/月。</div>
+  </div>
+
   <!-- 模型参数 -->
   <div class="card">
     <h2>① 基本面模型：预期进球 λ</h2>
@@ -359,6 +381,68 @@ function syncToCalc(){
   track('sync_to_calc');
   location.href='index.html?from=predictor';
 }
+
+// ==== 自动拉取赔率 (The Odds API 代理) ====
+let _matchCache = [];
+function apiBase(){ return (document.getElementById('apiBase').value||'').replace(/\/+$/,''); }
+async function fetchSports(){
+  const b=apiBase();
+  if(!b){ alert('请先填入你的数据代理地址（Cloudflare Worker 网址）。部署方法见仓库 worker/README.md'); return; }
+  const st=document.getElementById('apiStatus'); st.textContent='正在拉取赛事列表…';
+  try{
+    const r=await fetch(b+'/sports'); const d=await r.json();
+    if(!d.sports){ st.textContent='返回异常：'+JSON.stringify(d).slice(0,120); return; }
+    const sel=document.getElementById('sportSel'); sel.innerHTML='<option value="">— 选赛事 —</option>';
+    d.sports.forEach(s=>{ const o=document.createElement('option'); o.value=s.key; o.textContent=s.title; sel.appendChild(o); });
+    st.textContent=`✅ 拉到 ${d.sports.length} 个足球赛事。剩余额度 ${d.remaining||'?'} 次。请在右侧选赛事。`;
+    track('api_fetch_sports');
+    localStorage.setItem('apiBase', b);
+  }catch(e){ st.textContent='请求失败（检查代理地址/网络/CORS）：'+e; }
+}
+async function fetchMatches(){
+  const b=apiBase(), sport=document.getElementById('sportSel').value;
+  if(!b||!sport) return;
+  const st=document.getElementById('apiStatus'); st.textContent='正在拉取比赛与赔率…';
+  try{
+    const r=await fetch(`${b}/odds?sport=${sport}&regions=eu&markets=h2h,totals`);
+    const d=await r.json();
+    if(!d.matches){ st.textContent='返回异常：'+JSON.stringify(d).slice(0,120); return; }
+    _matchCache=d.matches;
+    const sel=document.getElementById('matchSel'); sel.innerHTML='<option value="">— 选比赛 —</option>';
+    d.matches.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i;
+      o.textContent=`${m.home_team} vs ${m.away_team}`; sel.appendChild(o); });
+    st.textContent=`✅ 拉到 ${d.matches.length} 场比赛。剩余额度 ${d.remaining||'?'} 次。请选具体比赛自动填赔率。`;
+    track('api_fetch_matches');
+  }catch(e){ st.textContent='请求失败：'+e; }
+}
+function applyMatchOdds(){
+  const i=document.getElementById('matchSel').value; if(i==='') return;
+  const m=_matchCache[+i]; if(!m||!m.bookmakers||!m.bookmakers.length){ document.getElementById('apiStatus').textContent='该比赛无可用赔率。'; return; }
+  // 取多家博彩的平均赔率，更稳健
+  const h2h={}, tot={}; let h2hN=0, totN={};
+  m.bookmakers.forEach(bk=>{
+    (bk.markets||[]).forEach(mk=>{
+      if(mk.key==='h2h'){ h2hN++;
+        mk.outcomes.forEach(o=>{ const k=(o.name===m.home_team)?'H':(o.name===m.away_team)?'A':'D'; h2h[k]=(h2h[k]||0)+o.price; });
+      }
+      if(mk.key==='totals'){
+        mk.outcomes.forEach(o=>{ const key=o.name+'_'+o.point; tot[key]=(tot[key]||0)+o.price; totN[key]=(totN[key]||0)+1; });
+      }
+    });
+  });
+  // 胜平负平均
+  if(h2hN){
+    document.getElementById('oW').value=(h2h['H']/h2hN).toFixed(2);
+    document.getElementById('oD').value=(h2h['D']/h2hN).toFixed(2);
+    document.getElementById('oL').value=(h2h['A']/h2hN).toFixed(2);
+  }
+  calc();
+  document.getElementById('apiStatus').innerHTML=
+    `✅ 已填入「${m.home_team} vs ${m.away_team}」的胜平负赔率（多家均值）。<br><span style="color:var(--muted)">注：The Odds API 的 totals 是「大/小 X球」盘，与竞彩「总进球数(0/1/2…)」口径不同，未自动填；比分盘 API 不提供。这两项请按竞彩 App 手填。</span>`;
+  track('api_apply_odds');
+}
+// 记住上次用的代理地址
+(function(){ const b=localStorage.getItem('apiBase'); if(b) document.getElementById('apiBase').value=b; })();
 
 // ---- λ 快速估算器 ----
 let _estLamH=null, _estLamA=null;

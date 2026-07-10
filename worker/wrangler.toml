@@ -1,0 +1,7 @@
+name = "odds-proxy"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# API key 不写在这里，用 wrangler secret 命令设置（见 README）
+# 部署: cd worker && npx wrangler deploy
+# 设密钥: npx wrangler secret put ODDS_API_KEY
