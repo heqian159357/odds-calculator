@@ -524,20 +524,24 @@ function loadFromSync() {
   try { data = JSON.parse(localStorage.getItem('dutching_sync') || 'null'); } catch (e) { data = null; }
   if (!data || !data.picks || !data.picks.length) return false;
   rows.innerHTML = '';
-  data.picks.forEach(p => addRow(p.name, p.odds, p.prob)); // 选项名/赔率/模型概率
+  data.picks.forEach(p => addRow(p.name, p.odds || '', p.prob)); // 选项名/赔率(可空)/命中概率
   setMode('budget');
-  document.getElementById('alloc').value = 'kelly'; // 有模型概率，默认凯利
+  // 有完整赔率→凯利；缺赔率→按看好程度(只需概率)，避免凯利因缺赔率失效
+  const useKelly = !data.needOdds;
+  document.getElementById('alloc').value = useKelly ? 'kelly' : 'prob';
   onAllocChange(false);
-  localStorage.removeItem('dutching_sync'); // 用完即清，避免下次残留
-  showSyncBanner(data.picks.length);
+  localStorage.removeItem('dutching_sync');
+  showSyncBanner(data.picks.length, data.needOdds, useKelly);
   track('recv_from_predictor');
   return true;
 }
-function showSyncBanner(n) {
+function showSyncBanner(n, needOdds, useKelly) {
   const wrap = document.querySelector('.wrap');
   const b = document.createElement('div');
   b.style.cssText = 'background:rgba(53,196,106,.12);border:1px solid var(--good);color:var(--text);border-radius:10px;padding:12px;margin-bottom:14px;font-size:14px;';
-  b.innerHTML = `✅ 已从精算分析器同步 <b>${n}</b> 个标的（含赔率与模型概率），已自动选用<b>凯利策略</b>生成购买建议。<br><span style="color:var(--muted);font-size:12px">填入总预算即可看到每注该投多少。不满意可切换其他分配策略，或 <a href="predictor.html" style="color:var(--accent)">返回精算分析器</a> 重选。</span>`;
+  const strat = useKelly ? '凯利策略' : '「按看好程度」策略';
+  const warn = needOdds ? '<br><span style="color:var(--gold);font-size:12px">⚠ 部分标的缺赔率（胜负/总进球需你在竞彩查后手填「赔率」列），否则收益计算不准。</span>' : '';
+  b.innerHTML = `✅ 已从精算分析器同步 <b>${n}</b> 个预测项（含命中概率），已自动选用<b>${strat}</b>。<br><span style="color:var(--muted);font-size:12px">填入总预算即可看到每注该投多少。可切换其他分配策略，或 <a href="predictor.html" style="color:var(--accent)">返回精算分析器</a> 重选。</span>${warn}`;
   wrap.insertBefore(b, wrap.firstChild.nextSibling);
 }
 

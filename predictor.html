@@ -100,6 +100,12 @@
   .pred-line b{color:var(--text);}
   /* 同步按钮做成醒目 CTA */
   #syncBtn, .btn.cta{width:100%;padding:14px;font-size:16px;}
+  .pick-row{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer;}
+  .pick-row input{width:18px;height:18px;}
+  .pick-tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:1px 7px;}
+  .pick-name{font-weight:700;min-width:44px;}
+  .pick-prob{color:var(--good);font-size:13px;}
+  .pick-odds{margin-left:auto;color:var(--muted);font-size:13px;}
   /* ===== 手机适配 ===== */
   @media (max-width:560px){
     body{padding:10px;}
@@ -146,6 +152,11 @@
       <button class="btn cta" onclick="predictFromOdds()">🎯 用赔率反推 λ 并预测比分</button>
     </div>
     <div id="predMeta" class="note"></div>
+    <div id="syncBox" style="display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">勾选想买的预测项，带入分注计算器算每注金额：</div>
+      <div id="pickList"></div>
+      <button class="btn cta" style="margin-top:10px" onclick="syncPicks()">✅ 带入分注计算器 →</button>
+    </div>
   </div>
 
   <!-- 自动拉取赔率 -->
@@ -248,80 +259,31 @@
     </details>
   </div>
 
-  <!-- 胜平负 -->
+  <!-- 赔率输入（反推 λ 的原料） -->
   <div class="card">
-    <h2>② 胜平负盘</h2>
+    <h2>② 赔率输入 <span style="font-size:12px;color:var(--muted)">反推 λ 的原料</span></h2>
     <div class="field">
-      <label>赔率</label>
-      主胜 <input class="odds-in" id="oW" type="number" step="0.01" value="1.46" oninput="calc()">
-      平 <input class="odds-in" id="oD" type="number" step="0.01" value="3.80" oninput="calc()">
-      主负 <input class="odds-in" id="oL" type="number" step="0.01" value="5.50" oninput="calc()">
+      <label>胜平负赔率</label>
+      主胜 <input class="odds-in" id="oW" type="number" step="0.01" value="1.46">
+      平 <input class="odds-in" id="oD" type="number" step="0.01" value="3.80">
+      主负 <input class="odds-in" id="oL" type="number" step="0.01" value="5.50">
     </div>
-    <div id="wdlMargin" class="margin-warn"></div>
-    <table id="wdlTbl"><thead>
-      <tr><th>结果</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th><th>选</th></tr>
-    </thead><tbody></tbody></table>
-    <div class="grid3" style="margin-top:12px">
-      <div class="stat"><div class="k">融合·主胜</div><div class="v" id="fW">-</div></div>
-      <div class="stat"><div class="k">融合·平</div><div class="v" id="fD">-</div></div>
-      <div class="stat"><div class="k">融合·主负</div><div class="v" id="fL">-</div></div>
-    </div>
-    <div class="note">融合 = 市场70% + 模型30%（精算常用配比，市场已聚合全部信息，权重更高）。</div>
-  </div>
-
-  <!-- 总进球 -->
-  <div class="card">
-    <h2>③ 总进球数盘</h2>
-    <div class="field" style="gap:6px">
-      <label style="width:auto">赔率(0~7+)</label>
-      <input class="odds-in" id="g0" type="number" step="0.01" value="14.0" oninput="calc()" placeholder="0">
-      <input class="odds-in" id="g1" type="number" step="0.01" value="5.30" oninput="calc()" placeholder="1">
-      <input class="odds-in" id="g2" type="number" step="0.01" value="3.65" oninput="calc()" placeholder="2">
-      <input class="odds-in" id="g3" type="number" step="0.01" value="3.40" oninput="calc()" placeholder="3">
-      <input class="odds-in" id="g4" type="number" step="0.01" value="4.90" oninput="calc()" placeholder="4">
-      <input class="odds-in" id="g5" type="number" step="0.01" value="8.50" oninput="calc()" placeholder="5">
-      <input class="odds-in" id="g6" type="number" step="0.01" value="16.0" oninput="calc()" placeholder="6">
-      <input class="odds-in" id="g7" type="number" step="0.01" value="24.0" oninput="calc()" placeholder="7+">
-    </div>
-    <div id="goalMargin" class="margin-warn"></div>
-    <table id="goalTbl"><thead>
-      <tr><th>进球</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th><th>选</th></tr>
-    </thead><tbody></tbody></table>
-  </div>
-
-  <!-- 比分 -->
-  <div class="card">
-    <h2>④ 精确比分盘</h2>
-    <div id="scoreMargin" class="margin-warn"></div>
-    <table id="scoreTbl"><thead>
-      <tr><th>比分</th><th>赔率</th><th>模型概率</th><th>市场概率</th><th>EV/元</th><th>判断</th><th>选</th></tr>
-    </thead><tbody></tbody></table>
-    <div class="note">只列出有赔率输入的比分。留空的比分不参与。默认已填入西班牙vs比利时的竞彩赔率。</div>
+    <div class="note">填国际盘（Pinnacle 等）胜平负赔率即可反推 λ 做预测。自动拉取会带回大小球/亚盘多盘线一起联立，更准。</div>
     <details>
-      <summary>展开/编辑比分赔率</summary>
+      <summary>（可选）填竞彩比分赔率 → 预测里显示各比分"命中概率×赔率"</summary>
       <div id="scoreInputs" style="margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
     </details>
   </div>
 
-  <!-- value 汇总 -->
-  <div class="card">
-    <h2>🎯 Value Bet 汇总（模型认为赔率给高了）</h2>
-    <div id="valueSummary" class="note">填入赔率后自动计算。</div>
-    <div class="btns">
-      <button class="btn cta" onclick="syncToCalc()">✅ 把勾选的标的同步到分注计算器 →</button>
-    </div>
-    <div class="note">默认勾选所有 value bet。你也可在上面各表手动勾选任意标的。点同步后跳到分注计算器，自动填入选项+赔率+模型概率，并按凯利算购买建议。</div>
-  </div>
-
   <!-- 方法论 -->
   <div class="card">
-    <h2>📖 这个模型在做什么</h2>
+    <h2>📖 预测模型原理</h2>
     <div class="expl">
-      <b>1. 泊松分布</b>：假设每队进球服从泊松分布，P(进k球)=λ^k·e^⁻λ/k!。两队独立相乘得到每个比分的概率。<br><br>
-      <b>2. Dixon-Coles 修正</b>：裸泊松会低估 0:0、1:0、1:1 等低比分。用相关系数 ρ 对这四格做 τ 修正——这是学术界和博彩业的标准改进。<br><br>
-      <b>3. 去抽水 (de-vig)</b>：博彩赔率的倒数之和 &gt;100%，多出的部分就是抽水(overround)。把它归一化，才得到市场真正认为的概率。<br><br>
-      <b>4. EV 与 Value</b>：EV = 模型概率 × 赔率 − 1。&gt;0 表示长期正期望，即赔率给高了(value bet)。抽水越深，越难找到 value。<br><br>
-      <b>5. 融合</b>：单一模型难持续战胜市场，故把模型与市场加权(常用 3:7)，只在两者分歧大且模型有据时才认为有价值。
+      <b>1. 以锐利盘为真值</b>：博彩公司（尤其 Pinnacle）的赔率已聚合全球信息与资金，其去抽水后的隐含概率是当前最优"真实概率"。我们不与之竞争，而是以它为基准。<br><br>
+      <b>2. 去抽水 (de-vig)</b>：赔率倒数之和 &gt;100%，多出部分是抽水。归一化后得到市场真实概率。<br><br>
+      <b>3. 反推 λ</b>：用胜平负+大小球+亚盘多个盘线联立、网格搜索，反解出最能复现市场赔率的两队预期进球 λ₁、λ₂。<br><br>
+      <b>4. 泊松 × Dixon-Coles</b>：P(进k球)=λ^k·e^⁻λ/k!，两队相乘得比分矩阵；再用相关系数 ρ 修正低比分(0:0/1:0/1:1)——DC 是学术与博彩业标准改进。<br><br>
+      <b>5. 命中概率导向</b>：固定奖金"不中即 0"，故按<b>命中概率</b>排序（胜负最易中、比分最难中），并给 Top3/Top5 覆盖策略，而非收益率 EV。
     </div>
   </div>
 </div>
@@ -340,7 +302,7 @@ for(let i=0;i<=5;i++) for(let j=0;j<=5;j++){ SCORE_LIST.push(i+':'+j); }
 SCORE_LIST.forEach(s=>{
   const v = DEFAULT_SCORES[s] || '';
   const d = document.createElement('div');
-  d.innerHTML = `<span style="color:var(--muted);font-size:12px">${s}</span> <input class="odds-in" style="width:64px" data-score="${s}" type="number" step="0.01" value="${v}" oninput="calc()">`;
+  d.innerHTML = `<span style="color:var(--muted);font-size:12px">${s}</span> <input class="odds-in" style="width:64px" data-score="${s}" type="number" step="0.01" value="${v}">`;
   scoreInputsEl.appendChild(d);
 });
 
@@ -355,12 +317,6 @@ function tau(i,j,lh,la,rho){
   return 1;
 }
 const MAX=8;
-function buildGrid(lh,la,rho){
-  let g=[],t=0;
-  for(let i=0;i<MAX;i++){g[i]=[];for(let j=0;j<MAX;j++){g[i][j]=pois(lh,i)*pois(la,j)*tau(i,j,lh,la,rho);t+=g[i][j];}}
-  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)g[i][j]/=t;
-  return g;
-}
 // 去抽水
 function devig(obj){
   let raw={},s=0;
@@ -368,63 +324,6 @@ function devig(obj){
   let out={};
   for(const k in raw) out[k]=raw[k]/s;
   return {probs:out, margin:s};
-}
-function evClass(ev){ return ev>0.05?'value':(ev>-0.1?'':'neg'); }
-function evFlag(ev){ return ev>0.05?'<span class="badge v">★VALUE</span>':(ev>-0.1?'尚可':''); }
-
-// 生成一行的勾选框：value bet(ev>0.05) 默认勾选。data-* 存标的信息供同步用
-function cb(name,o,mp,ev){
-  const checked = ev>0.05 ? 'checked' : '';
-  return `<input type="checkbox" class="pick" ${checked} data-name="${name}" data-odds="${o.toFixed(2)}" data-prob="${(mp*100).toFixed(1)}">`;
-}
-
-// 检测勾选标的间的重叠（同一结果被重复押注，会让凯利仓位失真）
-function findOverlaps(picks){
-  const warns=[];
-  const names=picks.map(p=>p.name);
-  const has=n=>names.includes(n);
-  // 1) 比分 i:j 被 总进球(i+j) 包含
-  picks.forEach(p=>{
-    const m=p.name.match(/^(\d+):(\d+)$/);
-    if(m){
-      const tot=(+m[1])+(+m[2]);
-      const g='总进球'+(tot>=7?'7+':tot);
-      if(has(g)) warns.push(`「比分 ${p.name}」⊂「${g}」——${p.name} 已包含在总进球${tot>=7?'7+':tot}里`);
-    }
-  });
-  // 2) 比分 i:j 被 胜平负 包含
-  picks.forEach(p=>{
-    const m=p.name.match(/^(\d+):(\d+)$/);
-    if(m){
-      const i=+m[1],j=+m[2];
-      const r=i>j?'胜':(i<j?'负':'平');
-      if(has(r)) warns.push(`「比分 ${p.name}」⊂「${r}」——${p.name} 已包含在胜平负的「${r}」里`);
-    }
-  });
-  // 3) 总进球0 与 胜平负「平」重叠(0球必是0:0即平)
-  if(has('总进球0') && has('平')) warns.push('「总进球0」与「平」重叠——0球必然是平局');
-  return warns;
-}
-
-// 一键同步：把勾选标的写入 localStorage，跳转到分注计算器
-function syncToCalc(){
-  const picks=[];
-  document.querySelectorAll('.pick:checked').forEach(c=>{
-    picks.push({ name:c.dataset.name, odds:parseFloat(c.dataset.odds), prob:parseFloat(c.dataset.prob) });
-  });
-  if(picks.length===0){ alert('还没有勾选任何标的。可在各表右侧「选」列勾选，或保留默认勾选的 value bet。'); return; }
-
-  const warns=findOverlaps(picks);
-  if(warns.length){
-    const msg='⚠ 检测到重叠标的（对同一结果重复押注，会让凯利仓位失真）：\n\n'
-      + warns.map((w,i)=>(i+1)+'. '+w).join('\n')
-      + '\n\n建议同类重叠的只保留一个（本场优先选抽水更浅的总进球盘）。\n\n点「确定」仍按现状同步，「取消」返回修改勾选。';
-    if(!confirm(msg)){ track('sync_overlap_cancel'); return; }
-    track('sync_overlap_ignore');
-  }
-  localStorage.setItem('dutching_sync', JSON.stringify({ ts:Date.now(), picks }));
-  track('sync_to_calc');
-  location.href='index.html?from=predictor';
 }
 
 // ==== 自动拉取赔率 (The Odds API 代理) ====
@@ -514,7 +413,6 @@ function applyMatchOdds(){
 
   _predMatchName=`${m.home_team} vs ${m.away_team}`;
   document.getElementById('predMatchName').textContent=_predMatchName;
-  calc();
   const parts=[];
   if(_mktTotalsAll.length) parts.push(`大小球×${_mktTotalsAll.length}盘线`);
   if(_mktSpreadAll.length) parts.push(`亚盘×${_mktSpreadAll.length}盘线`);
@@ -570,7 +468,6 @@ function predictFromOdds(){
   const sol=solveLambda(mW,mD,mL,_mktTotalsAll,_mktSpreadAll,rho);
   document.getElementById('lamH').value=sol.l1.toFixed(2);
   document.getElementById('lamA').value=sol.l2.toFixed(2);
-  calc();
 
   const p=modelProbsFor(sol.l1,sol.l2,rho);
   const homeName=_predMatchName?_predMatchName.split(' vs ')[0]:'主队';
@@ -639,7 +536,36 @@ function predictFromOdds(){
   document.getElementById('predMeta').innerHTML=
     `λ 由国际锐利盘反推：拟合 胜平负＋大小球×${nT}＋亚盘×${nS} 共 ${3+nT+nS} 个约束，误差 ${sol.err.toFixed(4)}。`+
     `<br><span style="color:var(--muted)">命中导向：固定奖金玩法「不中即 0」，故按<b>命中概率</b>排序而非收益率。押胜负最易中(赔率低)，押比分难中(赔率高)，按你的风险偏好选颗粒度。</span>`;
+
+  // ===== 构建可勾选带入分注计算器的清单 =====
+  const jcOdds=collectScoreOdds();
+  const picks=[];
+  top5.forEach(t=>picks.push({name:t.s, prob:t.p, odds:jcOdds[t.s]||null, kind:'比分'}));
+  picks.push({name:wdl[0].k, prob:wdl[0].p, odds:null, kind:'胜负'});
+  tgTop3.forEach(t=>picks.push({name:t.g+'球', prob:t.pr, odds:null, kind:'总进球'}));
+  _pickPool=picks;
+  document.getElementById('pickList').innerHTML=picks.map((p,i)=>
+    `<label class="pick-row">
+      <input type="checkbox" class="pickcb" data-i="${i}" ${p.kind==='比分'&&top3.some(t=>t.s===p.name)?'checked':''}>
+      <span class="pick-tag">${p.kind}</span>
+      <span class="pick-name">${p.name}</span>
+      <span class="pick-prob">命中 ${(p.prob*100).toFixed(1)}%</span>
+      <span class="pick-odds">${p.odds?('@'+p.odds.toFixed(2)):'<span style="color:var(--muted)">赔率?</span>'}</span>
+    </label>`).join('');
+  document.getElementById('syncBox').style.display='';
   track('predict_from_odds');
+}
+let _pickPool=[];
+// 勾选带入分注计算器：把命中概率当"我估概率"，赔率若缺则提示手填
+function syncPicks(){
+  const chosen=[];
+  document.querySelectorAll('.pickcb:checked').forEach(cb=>{ const p=_pickPool[+cb.dataset.i]; if(p) chosen.push(p); });
+  if(!chosen.length){ alert('请至少勾选一个预测项'); return; }
+  const noOdds=chosen.filter(p=>!p.odds);
+  const picks=chosen.map(p=>({ name:p.name, odds:p.odds||null, prob:+(p.prob*100).toFixed(1) }));
+  localStorage.setItem('dutching_sync', JSON.stringify({ ts:Date.now(), picks, needOdds: noOdds.length>0 }));
+  track('sync_picks');
+  location.href='index.html?from=predictor';
 }
 let _lastScoreProb={};
 // 读取"④ 精确比分盘"里已填的竞彩赔率
@@ -732,104 +658,10 @@ function applyLambda(){
   document.getElementById('lamH').value=_estLamH.toFixed(2);
   document.getElementById('lamA').value=_estLamA.toFixed(2);
   track('apply_lambda');
-  calc();
-  document.getElementById('lamResult').innerHTML+='<br><span style="color:var(--good)">✅ 已应用，下方所有盘口已按新 λ 重算。</span>';
+  document.getElementById('lamResult').innerHTML+='<br><span style="color:var(--good)">✅ 已应用为当前 λ，点顶部「🎯 预测」出结果。</span>';
 }
 
-function calc(){
-  const lh=parseFloat(document.getElementById('lamH').value)||0;
-  const la=parseFloat(document.getElementById('lamA').value)||0;
-  const rho=parseFloat(document.getElementById('rho').value)||0;
-  if(!lh||!la) return;
-  const g=buildGrid(lh,la,rho);
-  const valueBets=[];
-
-  // 模型: 胜平负
-  let mW=0,mD=0,mL=0;
-  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){ if(i>j)mW+=g[i][j];else if(i===j)mD+=g[i][j];else mL+=g[i][j]; }
-
-  // --- 胜平负表 ---
-  const oW=parseFloat(document.getElementById('oW').value),
-        oD=parseFloat(document.getElementById('oD').value),
-        oL=parseFloat(document.getElementById('oL').value);
-  const wdlOdds={'主胜':oW,'平':oD,'主负':oL};
-  const wdlModel={'主胜':mW,'平':mD,'主负':mL};
-  const wdlDV=devig(wdlOdds);
-  document.getElementById('wdlMargin').innerHTML =
-    `抽水率 <b style="color:${wdlDV.margin-1>0.1?'var(--bad)':'var(--gold)'}">${((wdlDV.margin-1)*100).toFixed(1)}%</b>`;
-  const wdlBody=document.querySelector('#wdlTbl tbody'); wdlBody.innerHTML='';
-  ['主胜','平','主负'].forEach(k=>{
-    const o=wdlOdds[k], mp=wdlModel[k], ip=wdlDV.probs[k]||0, ev=o?mp*o-1:0;
-    if(ev>0.05) valueBets.push({name:'胜平负·'+k,o,mp,ev});
-    const label=(k==='主胜'?'胜':k==='主负'?'负':'平');
-    wdlBody.innerHTML+=`<tr class="${ev>0.05?'row-star':''}"><td>${k}</td><td>${o?o.toFixed(2):'-'}</td><td>${(mp*100).toFixed(1)}%</td><td>${(ip*100).toFixed(1)}%</td><td class="${evClass(ev)}">${o?(ev>=0?'+':'')+ev.toFixed(2):'-'}</td><td>${o?evFlag(ev):''}</td><td style="text-align:center">${o?cb(label,o,mp,ev):''}</td></tr>`;
-  });
-  // 融合 70/30
-  const W=0.70;
-  let fW=W*(wdlDV.probs['主胜']||0)+(1-W)*mW, fD=W*(wdlDV.probs['平']||0)+(1-W)*mD, fL=W*(wdlDV.probs['主负']||0)+(1-W)*mL;
-  const fs=fW+fD+fL; fW/=fs;fD/=fs;fL/=fs;
-  document.getElementById('fW').textContent=(fW*100).toFixed(1)+'%';
-  document.getElementById('fD').textContent=(fD*100).toFixed(1)+'%';
-  document.getElementById('fL').textContent=(fL*100).toFixed(1)+'%';
-
-  // --- 总进球 ---
-  const tg={};
-  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){const s=i+j;tg[s]=(tg[s]||0)+g[i][j];}
-  const goalModel={0:tg[0],1:tg[1],2:tg[2],3:tg[3],4:tg[4],5:tg[5],6:tg[6],'7+':0};
-  for(let k in tg){if(+k>=7)goalModel['7+']+=tg[k];}
-  const goalOdds={};
-  ['0','1','2','3','4','5','6','7'].forEach((id,idx)=>{
-    const key=idx<=6?idx:'7+';
-    const v=parseFloat(document.getElementById('g'+id).value);
-    if(v>0)goalOdds[key]=v;
-  });
-  const goalDV=devig(goalOdds);
-  document.getElementById('goalMargin').innerHTML=
-    `抽水率 <b style="color:${goalDV.margin-1>0.1?'var(--bad)':'var(--gold)'}">${((goalDV.margin-1)*100).toFixed(1)}%</b>`;
-  const goalBody=document.querySelector('#goalTbl tbody'); goalBody.innerHTML='';
-  [0,1,2,3,4,5,6,'7+'].forEach(k=>{
-    const o=goalOdds[k], mp=goalModel[k]||0, ip=goalDV.probs[k]||0, ev=o?mp*o-1:0;
-    if(o&&ev>0.05) valueBets.push({name:'总进球·'+k,o,mp,ev});
-    goalBody.innerHTML+=`<tr class="${o&&ev>0.05?'row-star':''}"><td>${k}球</td><td>${o?o.toFixed(2):'-'}</td><td>${(mp*100).toFixed(1)}%</td><td>${o?(ip*100).toFixed(1)+'%':'-'}</td><td class="${o?evClass(ev):'neg'}">${o?(ev>=0?'+':'')+ev.toFixed(2):'-'}</td><td>${o?evFlag(ev):''}</td><td style="text-align:center">${o?cb('总进球'+k,o,mp,ev):''}</td></tr>`;
-  });
-
-  // --- 比分 ---
-  const scoreOdds={};
-  document.querySelectorAll('[data-score]').forEach(inp=>{
-    const v=parseFloat(inp.value); if(v>0)scoreOdds[inp.dataset.score]=v;
-  });
-  const scoreDV=devig(scoreOdds);
-  document.getElementById('scoreMargin').innerHTML=
-    `抽水率 <b style="color:${scoreDV.margin-1>0.15?'var(--bad)':'var(--gold)'}">${((scoreDV.margin-1)*100).toFixed(1)}%</b>` +
-    (scoreDV.margin-1>0.2?' ⚠ 比分盘抽水极深，慎入':'');
-  const rows=[];
-  for(const s in scoreOdds){
-    const [i,j]=s.split(':').map(Number);
-    const mp=(i<MAX&&j<MAX)?g[i][j]:0;
-    const ip=scoreDV.probs[s]||0, o=scoreOdds[s], ev=mp*o-1;
-    rows.push({s,o,mp,ip,ev});
-    if(ev>0.05) valueBets.push({name:'比分·'+s,o,mp,ev});
-  }
-  rows.sort((a,b)=>b.ev-a.ev);
-  const scoreBody=document.querySelector('#scoreTbl tbody'); scoreBody.innerHTML='';
-  rows.forEach(r=>{
-    scoreBody.innerHTML+=`<tr class="${r.ev>0.05?'row-star':''}"><td>${r.s}</td><td>${r.o.toFixed(2)}</td><td>${(r.mp*100).toFixed(1)}%</td><td>${(r.ip*100).toFixed(1)}%</td><td class="${evClass(r.ev)}">${(r.ev>=0?'+':'')+r.ev.toFixed(2)}</td><td>${evFlag(r.ev)}</td><td style="text-align:center">${cb(r.s,r.o,r.mp,r.ev)}</td></tr>`;
-  });
-
-  // --- value 汇总 ---
-  valueBets.sort((a,b)=>b.ev-a.ev);
-  const vs=document.getElementById('valueSummary');
-  if(valueBets.length===0){
-    vs.innerHTML='<span style="color:var(--muted)">当前赔率下没有正期望标的——说明市场定价合理，理性选择是<b>不下注</b>。</span>';
-  }else{
-    vs.innerHTML='<div style="color:var(--good);font-weight:600;margin-bottom:6px">发现 '+valueBets.length+' 个正期望标的（按EV排序）：</div>'+
-      valueBets.map(v=>`<div style="padding:4px 0;border-bottom:1px solid var(--line)">
-        <b>${v.name}</b> · 赔率${v.o.toFixed(2)} · 模型概率${(v.mp*100).toFixed(1)}% · <span class="value">EV ${v.ev>=0?'+':''}${v.ev.toFixed(2)}/元</span></div>`).join('')+
-      '<div class="note" style="margin-top:8px">拿这些标的去 <a href="index.html" style="color:var(--accent)">分注计算器</a>，用凯利公式算最优投注额（建议半凯利降波动）。EV 是长期期望，单场仍有波动，务必控制仓位。</div>';
-  }
-}
 estLambda();
-calc();
 track('open_predictor');
 </script>
 </body>
