@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模型回测 · 命中率 & 校准验证</title>
+<script data-goatcounter="https://oraclehe1.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-S7ZJW560JF"></script>
+<script>
+  window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}
+  gtag('js',new Date());gtag('config','G-S7ZJW560JF');
+  function track(n){try{if(window.goatcounter&&window.goatcounter.count)window.goatcounter.count({path:'evt/'+n,title:n,event:true});}catch(e){}try{if(typeof gtag==='function')gtag('event',n);}catch(e){}}
+</script>
+<style>
+  :root{--bg:#0f1115;--card:#1a1d24;--line:#2a2e38;--text:#e8eaed;--muted:#9aa0ab;--accent:#ff5a5a;--good:#35c46a;--bad:#ff5a5a;--input:#23272f;--gold:#f5b942;}
+  *{box-sizing:border-box;}
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.5;}
+  .wrap{max-width:760px;margin:0 auto;}
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px;}
+  .switch-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(255,90,90,.18),rgba(245,185,66,.12));border:1px solid var(--accent);border-radius:12px;padding:14px 16px;margin-bottom:16px;text-decoration:none;color:var(--text);}
+  .sb-icon{font-size:26px;}.sb-text{display:flex;flex-direction:column;flex:1;}.sb-text b{font-size:16px;}.sb-text small{color:var(--muted);font-size:12px;}.sb-arrow{font-size:22px;color:var(--accent);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;}
+  .card h2{font-size:15px;margin:0 0 10px;}
+  textarea{width:100%;background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:10px;font-size:13px;font-family:ui-monospace,Menlo,monospace;min-height:120px;}
+  textarea:focus{outline:none;border-color:var(--accent);}
+  .btn{background:var(--accent);border:none;color:#fff;border-radius:8px;padding:12px 16px;font-size:15px;cursor:pointer;font-weight:600;}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text);}
+  .btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;}
+  th,td{text-align:right;padding:7px 5px;border-bottom:1px solid var(--line);}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:var(--muted);font-weight:500;font-size:12px;}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0;}
+  .stat{background:var(--input);border-radius:8px;padding:12px;text-align:center;}
+  .stat .k{color:var(--muted);font-size:12px;}
+  .stat .v{font-size:22px;font-weight:700;margin-top:2px;}
+  .hit{color:var(--good);font-weight:700;}.miss{color:var(--muted);}
+  .note{color:var(--muted);font-size:12px;margin-top:8px;}
+  .expl{font-size:12.5px;color:var(--muted);}.expl b{color:var(--text);}
+  details{margin-top:8px;}summary{cursor:pointer;color:var(--accent);font-size:13px;}
+  @media(max-width:560px){body{padding:10px;}.grid{grid-template-columns:1fr 1fr;gap:6px;}table{font-size:12px;}th,td{padding:6px 2px;}.stat .v{font-size:18px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="switch-banner" href="predictor.html"><span class="sb-icon">🔮</span><span class="sb-text"><b>精算分析器</b><small>反推 λ · 预测比分</small></span><span class="sb-arrow">→</span></a>
+  <h1>📊 模型回测 <span style="font-size:13px;color:var(--muted)">命中率 & 概率校准验证</span></h1>
+  <div class="sub">录入多场"赛前赔率 + 实际比分"，跑模型验证命中率与校准度。这是模型质量的硬证据。</div>
+
+  <div class="card">
+    <h2>① 录入历史比赛</h2>
+    <div class="note" style="margin-bottom:8px">每行一场，格式（逗号分隔）：<br>
+      <b>主队名,客队名,主胜赔率,平赔率,客胜赔率,实际主队进球,实际客队进球</b><br>
+      可选在末尾加大小球盘：<b>,大小球线,大球赔率,小球赔率</b>
+    </div>
+    <textarea id="input" spellcheck="false">Spain,Belgium,1.65,4.0,5.86,2,1,2.5,2.04,1.88
+France,Spain,2.5,3.3,2.75,1,1
+Argentina,Switzerland,1.4,4.5,7.5,2,0</textarea>
+    <div class="btns">
+      <button class="btn" onclick="runBacktest()">▶ 跑回测</button>
+      <button class="btn ghost" onclick="loadDemo()">载入示例</button>
+    </div>
+    <div class="note">示例数据的比分为占位，请替换为真实结果。赔率用<b>赛前</b>国际盘（Pinnacle 等）最准。</div>
+  </div>
+
+  <div class="card">
+    <h2>② 回测结果</h2>
+    <div class="grid">
+      <div class="stat"><div class="k">场次</div><div class="v" id="nMatch">-</div></div>
+      <div class="stat"><div class="k">胜平负命中率</div><div class="v" id="wdlHit">-</div></div>
+      <div class="stat"><div class="k">比分Top1命中</div><div class="v" id="s1Hit">-</div></div>
+      <div class="stat"><div class="k">比分Top3命中</div><div class="v" id="s3Hit">-</div></div>
+      <div class="stat"><div class="k">比分Top5命中</div><div class="v" id="s5Hit">-</div></div>
+      <div class="stat"><div class="k">总进球Top1命中</div><div class="v" id="gHit">-</div></div>
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="stat"><div class="k">Brier 分数（越低越好）</div><div class="v" id="brier">-</div></div>
+      <div class="stat"><div class="k">校准判断</div><div class="v" id="calib" style="font-size:15px">-</div></div>
+    </div>
+    <div id="verdict" class="note"></div>
+  </div>
+
+  <div class="card">
+    <h2>③ 逐场明细</h2>
+    <table id="detail"><thead>
+      <tr><th>比赛</th><th>实际</th><th>预测Top1</th><th>赛果</th><th>比分Top3?</th><th>总进球Top1</th></tr>
+    </thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>📖 回测在验证什么</h2>
+    <div class="expl">
+      <b>命中率</b>：预测的最可能比分/赛果，实际中了多少。Top3命中率应接近其预测概率之和——若预测Top3概率和≈35%、实际命中也≈35%，说明<b>校准良好</b>。<br><br>
+      <b>Brier 分数</b>：概率预测的均方误差。对每场，实际发生的结果记 1、其余记 0，与预测概率求平方差。越低越准，0.2 以下为佳。<br><br>
+      <b>诚实定位</b>：本模型的比分概率<b>反推自赔率</b>，故回测检验的是"市场+泊松假设"的预测力，而非"我们超越市场"。样本越大结论越可靠，几场只能参考。
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 复用核心建模函数 =====
+const MAX=8;
+function fact(n){let r=1;for(let i=2;i<=n;i++)r*=i;return r;}
+function pois(l,k){return Math.pow(l,k)*Math.exp(-l)/fact(k);}
+function tau(i,j,lh,la,rho){if(i===0&&j===0)return 1-lh*la*rho;if(i===0&&j===1)return 1+lh*rho;if(i===1&&j===0)return 1+la*rho;if(i===1&&j===1)return 1-rho;return 1;}
+function devig(o){let raw={},s=0;for(const k in o){if(o[k]>0){raw[k]=1/o[k];s+=raw[k];}}let out={};for(const k in raw)out[k]=raw[k]/s;return out;}
+function modelGrid(lh,la,rho){let g=[],t=0;for(let i=0;i<MAX;i++){g[i]=[];for(let j=0;j<MAX;j++){g[i][j]=pois(lh,i)*pois(la,j)*tau(i,j,lh,la,rho);t+=g[i][j];}}for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)g[i][j]/=t;return g;}
+function wdlOf(g){let w=0,dr=0,l=0;for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){if(i>j)w+=g[i][j];else if(i===j)dr+=g[i][j];else l+=g[i][j];}return{w,dr,l};}
+function pOver(g,line){let s=0;for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)if(i+j>line)s+=g[i][j];return s;}
+// 反推 λ（胜平负 + 可选大小球）
+function solveLambda(mW,mD,mL,mOver,line,rho){
+  let best=null,be=1e9;
+  function S(a,b,c,d,st){for(let l1=a;l1<=b;l1+=st)for(let l2=c;l2<=d;l2+=st){const g=modelGrid(l1,l2,rho);const wd=wdlOf(g);let e=(wd.w-mW)**2+(wd.dr-mD)**2+(wd.l-mL)**2;if(mOver!=null)e+=(pOver(g,line)-mOver)**2;if(e<be){be=e;best={l1,l2};}}}
+  S(0.2,3.5,0.2,3.5,0.1);S(Math.max(0.1,best.l1-0.15),best.l1+0.15,Math.max(0.1,best.l2-0.15),best.l2+0.15,0.02);
+  return best;
+}
+
+function loadDemo(){
+  document.getElementById('input').value=
+`Spain,Belgium,1.65,4.0,5.86,2,1,2.5,2.04,1.88
+France,Spain,2.5,3.3,2.75,1,1
+Argentina,Switzerland,1.4,4.5,7.5,2,0`;
+}
+
+function runBacktest(){
+  const rho=-0.08;
+  const lines=document.getElementById('input').value.trim().split('\n').filter(x=>x.trim());
+  const rows=[];
+  let wdlHit=0,s1=0,s3=0,s5=0,gHit=0,brierSum=0,n=0;
+  for(const ln of lines){
+    const p=ln.split(',').map(x=>x.trim());
+    if(p.length<7) continue;
+    const home=p[0],away=p[1],oW=+p[2],oD=+p[3],oL=+p[4],gh=+p[5],ga=+p[6];
+    let mOver=null,line=null;
+    if(p.length>=10){ line=+p[7]; const dv=devig({O:+p[8],U:+p[9]}); mOver=dv.O; }
+    if(!oW||!oD||!oL||isNaN(gh)||isNaN(ga)) continue;
+    const dv=devig({H:oW,D:oD,A:oL});
+    const sol=solveLambda(dv.H,dv.D,dv.L,mOver,line,rho);
+    const g=modelGrid(sol.l1,sol.l2,rho);
+    // 比分排名
+    const sc=[];for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)sc.push({s:i+':'+j,i,j,p:g[i][j]});
+    sc.sort((a,b)=>b.p-a.p);
+    const actualS=gh+':'+ga;
+    const rank=sc.findIndex(x=>x.i===gh&&x.j===ga); // 0-based, -1 if>MAX
+    const inTop1=rank===0, inTop3=rank>=0&&rank<3, inTop5=rank>=0&&rank<5;
+    // 赛果
+    const wd=wdlOf(g);
+    const predRes=wd.w>=wd.dr&&wd.w>=wd.l?'H':(wd.dr>=wd.l?'D':'A');
+    const actRes=gh>ga?'H':(gh===ga?'D':'A');
+    const wdlOK=predRes===actRes;
+    // 总进球
+    const tg={};for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){tg[i+j]=(tg[i+j]||0)+g[i][j];}
+    const tgArr=Object.entries(tg).map(([k,v])=>({g:+k,p:v})).sort((a,b)=>b.p-a.p);
+    const gOK=tgArr[0].g===(gh+ga);
+    // Brier(以比分分布，实际比分记1)
+    let brier=0;for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){const y=(i===gh&&j===ga)?1:0;brier+=(g[i][j]-y)**2;}
+    brierSum+=brier;
+    // 累计
+    n++; if(wdlOK)wdlHit++; if(inTop1)s1++; if(inTop3)s3++; if(inTop5)s5++; if(gOK)gHit++;
+    rows.push({home,away,actualS,pred1:sc[0].s,wdlOK,inTop3,predG:tgArr[0].g,actG:gh+ga,rank});
+  }
+  if(!n){ document.getElementById('verdict').textContent='没有有效数据行，请检查格式。'; return; }
+  // 汇总
+  document.getElementById('nMatch').textContent=n;
+  document.getElementById('wdlHit').textContent=(wdlHit/n*100).toFixed(0)+'%';
+  document.getElementById('s1Hit').textContent=(s1/n*100).toFixed(0)+'%';
+  document.getElementById('s3Hit').textContent=(s3/n*100).toFixed(0)+'%';
+  document.getElementById('s5Hit').textContent=(s5/n*100).toFixed(0)+'%';
+  document.getElementById('gHit').textContent=(gHit/n*100).toFixed(0)+'%';
+  const brierAvg=brierSum/n;
+  document.getElementById('brier').textContent=brierAvg.toFixed(3);
+  const cal=document.getElementById('calib');
+  if(brierAvg<0.85){cal.textContent='良好';cal.className='v hit';}
+  else if(brierAvg<0.95){cal.textContent='一般';cal.className='v';cal.style.color='var(--gold)';}
+  else{cal.textContent='偏差大';cal.className='v';cal.style.color='var(--bad)';}
+  // 明细
+  const tb=document.querySelector('#detail tbody');tb.innerHTML='';
+  rows.forEach(r=>{tb.innerHTML+=`<tr>
+    <td>${r.home.slice(0,4)} v ${r.away.slice(0,4)}</td>
+    <td>${r.actualS}</td>
+    <td>${r.pred1}</td>
+    <td class="${r.wdlOK?'hit':'miss'}">${r.wdlOK?'✓':'✗'}</td>
+    <td class="${r.inTop3?'hit':'miss'}">${r.inTop3?'✓ 中':(r.rank<0?'榜外':'第'+(r.rank+1))}</td>
+    <td class="${r.predG===r.actG?'hit':'miss'}">${r.predG}球${r.predG===r.actG?'✓':'/实'+r.actG}</td>
+  </tr>`;});
+  document.getElementById('verdict').innerHTML=
+    `样本 ${n} 场。<b>胜平负命中 ${(wdlHit/n*100).toFixed(0)}%</b>，比分Top3命中 ${(s3/n*100).toFixed(0)}%。`+
+    (n<10?'<br><span style="color:var(--gold)">⚠ 样本偏少，结论仅供参考；建议 20+ 场才有统计意义。</span>':'');
+  track('run_backtest');
+}
+runBacktest();
+</script>
+</body>
+</html>
