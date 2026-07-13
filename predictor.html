@@ -182,7 +182,25 @@
       </select>
     </div>
     <div id="apiStatus" class="note"></div>
-    <div class="note">按需部署代理（见仓库 <b>worker/README.md</b>）。拉来的是<b>国际博彩盘</b>，仅作模型参考；比分盘 The Odds API 不提供，仍需手填竞彩赔率。免费额度 500 次/月。</div>
+    <details style="margin-top:8px">
+      <summary style="cursor:pointer;color:var(--accent);font-size:13px">❓ 没有数据代理地址？点这里看如何免费申请（约10分钟）</summary>
+      <div class="expl" style="margin-top:10px">
+        「数据代理地址」是你自己部署的一个免费中转服务（Cloudflare Worker），用来隐藏 API 密钥、解决跨域。三步搞定：<br><br>
+        <b>1. 申请 API key（免费）</b><br>
+        · 赔率：<a href="https://the-odds-api.com/" target="_blank" style="color:var(--accent)">the-odds-api.com</a>（500次/月）<br>
+        · 伤停/战绩（可选）：<a href="https://www.api-football.com/" target="_blank" style="color:var(--accent)">api-football.com</a>（100次/天）<br><br>
+        <b>2. 部署代理</b>（需装 <a href="https://nodejs.org" target="_blank" style="color:var(--accent)">Node.js</a>，命令行执行）：<br>
+        <code style="background:var(--input);padding:2px 6px;border-radius:4px;display:block;margin:4px 0;white-space:pre-wrap">git clone https://github.com/heqian159357/odds-calculator
+cd odds-calculator/worker
+npx wrangler login
+npx wrangler deploy
+npx wrangler secret put ODDS_API_KEY
+npx wrangler secret put APIFOOTBALL_KEY</code>
+        <b>3. 部署成功后</b>会显示形如 <code>https://odds-proxy.xxx.workers.dev</code> 的网址，填到上面即可。<br><br>
+        详细图文见仓库 <a href="https://github.com/heqian159357/odds-calculator/blob/main/worker/README.md" target="_blank" style="color:var(--accent)">worker/README.md</a>。地址会自动记住，只需填一次。
+      </div>
+    </details>
+    <div class="note">拉来的是<b>国际博彩盘</b>，仅作模型参考；比分盘不提供，需手填竞彩。免费额度 500 次/月。</div>
   </div>
 
   <!-- API-Football：伤停/交锋 -->
@@ -600,28 +618,51 @@ async function fetchAF(){
     if(th.error||ta.error){ el.innerHTML='<span class="hl-bad">'+(th.error||ta.error)+'（需在 Worker 配 APIFOOTBALL_KEY）</span>'; return; }
     const hid=th.teams&&th.teams[0]&&th.teams[0].id, aid=ta.teams&&ta.teams[0]&&ta.teams[0].id;
     if(!hid||!aid){ el.textContent='未找到球队，请用标准英文名（如 Spain / Belgium）。'; return; }
-    const [ih,ia,hh,fh,fa]=await Promise.all([
+    el.textContent='查询中…（伤停/战绩/交锋/预测）';
+    const [ih,ia,hh,fh,fa,fx]=await Promise.all([
       fetch(`${b}/af/injuries?team=${hid}&season=2026`).then(r=>r.json()),
       fetch(`${b}/af/injuries?team=${aid}&season=2026`).then(r=>r.json()),
       fetch(`${b}/af/h2h?h=${hid}&a=${aid}`).then(r=>r.json()),
       fetch(`${b}/af/form?team=${hid}&last=10`).then(r=>r.json()),
-      fetch(`${b}/af/form?team=${aid}&last=10`).then(r=>r.json())
+      fetch(`${b}/af/form?team=${aid}&last=10`).then(r=>r.json()),
+      fetch(`${b}/af/fixture?h=${hid}&a=${aid}`).then(r=>r.json())
     ]);
-    _afForm={h:fh,a:fa,hName:h,aName:a}; // 存供"填入估算器"
+    _afForm={h:fh,a:fa,hName:h,aName:a};
+    // 有 fixture 再拉 API 自带预测 + 阵容
+    let pred=null, lineup=null;
+    if(fx && fx.fixture){
+      [pred,lineup]=await Promise.all([
+        fetch(`${b}/af/predictions?fixture=${fx.fixture}`).then(r=>r.json()).catch(()=>null),
+        fetch(`${b}/af/lineup?fixture=${fx.fixture}`).then(r=>r.json()).catch(()=>null)
+      ]);
+    }
     const injList=(name,inj)=>{ const arr=(inj.injuries||[]); return `<b>${name}</b> 伤停 ${arr.length} 人`+(arr.length?'：'+arr.slice(0,6).map(x=>x.player+(x.reason?`(${x.reason})`:'')).join('、'):''); };
-    // 近期战绩
     const formLine=(name,f)=>{ if(!f||!f.n) return `<b>${name}</b>：近期战绩无数据`;
-      const rec=(f.games||[]).slice(0,6).map(g=>g.res).join(''); // 如 WWDLW
+      const rec=(f.games||[]).slice(0,6).map(g=>g.res).join('');
       return `<b>${name}</b> 近${f.n}场：进${f.gf}失${f.ga}（场均 ${f.avgGF.toFixed(2)}/${f.avgGA.toFixed(2)}）近况 ${rec}`; };
     const h2hArr=hh.h2h||[];
     const h2hList=h2hArr.slice(0,6).map(f=>`${f.date.slice(0,10)} ${f.home} ${f.score} ${f.away}`).join('<br>');
-    el.innerHTML=
+
+    let html=
       `<div style="margin:6px 0">${injList(h,ih)}</div><div style="margin:6px 0">${injList(a,ia)}</div>`+
       `<div style="margin:8px 0;border-top:1px solid var(--line);padding-top:8px">${formLine(h,fh)}<br>${formLine(a,fa)}</div>`+
-      `<button class="btn ghost" style="padding:6px 10px" onclick="applyFormToEstimator()">↓ 用近期战绩填入 λ 估算器</button>`+
-      (h2hList?`<div style="margin-top:8px;color:var(--muted)">近期交锋：<br>${h2hList}</div>`
-             :`<div style="margin-top:8px;color:var(--muted)">近期交锋：无数据（国家队 h2h 覆盖有限，属正常）</div>`)+
+      `<button class="btn ghost" style="padding:6px 10px" onclick="applyFormToEstimator()">↓ 用近期战绩填入 λ 估算器</button>`;
+    // API 自带预测（第二意见）
+    if(pred && pred.prediction){
+      const pp=pred.prediction;
+      html+=`<div style="margin:10px 0;border-top:1px solid var(--line);padding-top:8px"><b style="color:var(--gold)">🤖 API 自带预测（第二意见）</b><br>`+
+        (pp.winner?`看好：${pp.winner}　`:'')+(pp.advice?`建议：${pp.advice}`:'')+
+        (pp.percent?`<br>胜率 主${pp.percent.home} 平${pp.percent.draw} 客${pp.percent.away}`:'')+`</div>`;
+    }
+    // 首发阵容
+    if(lineup && lineup.lineups && lineup.lineups.length){
+      html+=`<div style="margin:8px 0;color:var(--muted)"><b>首发阵容：</b><br>`+
+        lineup.lineups.map(l=>`${l.team}(${l.formation||'-'}): ${(l.xi||[]).slice(0,11).join('、')}`).join('<br>')+`</div>`;
+    }
+    html+=(h2hList?`<div style="margin-top:8px;color:var(--muted)">近期交锋：<br>${h2hList}</div>`
+                 :`<div style="margin-top:8px;color:var(--muted)">近期交锋：无数据（国家队 h2h 覆盖有限，属正常）</div>`)+
       `<div class="note" style="color:var(--gold)">👆 主力伤缺→手动下调该队 λ；近期战绩可一键填入估算器。</div>`;
+    el.innerHTML=html;
     track('fetch_af');
   }catch(e){ el.textContent='请求失败：'+e; }
 }

@@ -95,6 +95,22 @@ export default {
           const f = (d.response || [])[0];
           return json({ fixture: f ? f.fixture.id : null, date: f ? f.fixture.date : null });
         }
+        // /af/lineup?fixture=123 → 预计/首发阵容
+        if (url.pathname === '/af/lineup') {
+          const fixture = url.searchParams.get('fixture');
+          const d = await afFetch(`/fixtures/lineups?fixture=${fixture}`);
+          return json({ lineups: (d.response || []).map(l => ({
+            team: l.team.name, formation: l.formation,
+            xi: (l.startXI || []).map(p => p.player.name) })) });
+        }
+        // /af/topscorers?league=1&season=2026 → 射手榜(赛事级)
+        if (url.pathname === '/af/topscorers') {
+          const league = url.searchParams.get('league') || '1', season = url.searchParams.get('season') || '2026';
+          const d = await afFetch(`/players/topscorers?league=${league}&season=${season}`);
+          return json({ scorers: (d.response || []).slice(0, 10).map(p => ({
+            name: p.player.name, team: p.statistics?.[0]?.team?.name,
+            goals: p.statistics?.[0]?.goals?.total })) });
+        }
         return json({ error: '未知 /af/ 路由' }, 404);
       } catch (e) { return json({ error: String(e) }, 500); }
     }
