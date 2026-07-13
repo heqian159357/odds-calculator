@@ -170,6 +170,18 @@
     <div class="note">按需部署代理（见仓库 <b>worker/README.md</b>）。拉来的是<b>国际博彩盘</b>，仅作模型参考；比分盘 The Odds API 不提供，仍需手填竞彩赔率。免费额度 500 次/月。</div>
   </div>
 
+  <!-- API-Football：伤停/交锋 -->
+  <div class="card">
+    <h2>🏥 伤停 & 历史交锋 <span style="font-size:12px;color:var(--muted)">API-Football（需另配 key）</span></h2>
+    <div class="field" style="gap:6px;flex-wrap:wrap">
+      <input id="afHome" type="text" placeholder="主队英文名 如 Spain" style="flex:1;min-width:120px">
+      <input id="afAway" type="text" placeholder="客队英文名 如 Belgium" style="flex:1;min-width:120px">
+      <button class="btn ghost" onclick="fetchAF()">查伤停+交锋</button>
+    </div>
+    <div id="afResult" class="note"></div>
+    <div class="note">用同一个 Worker 代理（需再配 APIFOOTBALL_KEY，见 README）。伤停信息供你<b>手动调整 λ</b>参考——如主力前锋伤缺，可下调该队 λ。免费 100 次/天。</div>
+  </div>
+
   <!-- 模型参数 -->
   <div class="card">
     <h2>① 基本面模型：预期进球 λ</h2>
@@ -177,6 +189,13 @@
     <div class="field"><label>客队预期进球 λ₂</label><input class="lam-in" id="lamA" type="number" step="0.05" value="0.67"></div>
     <div class="field"><label>低分修正 ρ (Dixon-Coles)</label><input class="lam-in" id="rho" type="number" step="0.01" value="-0.08"></div>
     <div class="note">λ = 该队本场预期进几个球。这是唯一需要你判断的输入。不会算？↓用下面的估算器。ρ 修正低比分相关性，一般 -0.03~-0.12。</div>
+    <div class="field" style="margin-top:8px;border-top:1px solid var(--line);padding-top:10px">
+      <label>xG 交叉验证</label>
+      主队近期场均xG <input class="lam-in" id="xgH" type="number" step="0.05" placeholder="如1.6">
+      客队 <input class="lam-in" id="xgA" type="number" step="0.05" placeholder="如1.0">
+      <button class="btn ghost" style="padding:6px 10px" onclick="validateXG()">对比</button>
+    </div>
+    <div id="xgResult" class="note"></div>
   </div>
 
   <!-- λ 快速估算器 -->
@@ -629,6 +648,51 @@ function collectScoreOdds(){
   document.querySelectorAll('[data-score]').forEach(inp=>{ const v=parseFloat(inp.value); if(v>0) out[inp.dataset.score]=v; });
   return out;
 }
+// ==== API-Football：伤停 + 历史交锋 ====
+async function fetchAF(){
+  const b=apiBase(); const h=document.getElementById('afHome').value.trim(), a=document.getElementById('afAway').value.trim();
+  const el=document.getElementById('afResult');
+  if(!b){ alert('请先在上方填数据代理地址'); return; }
+  if(!h||!a){ alert('请填两队英文名'); return; }
+  el.textContent='查询中…';
+  try{
+    // 找队 id
+    const [th,ta]=await Promise.all([
+      fetch(`${b}/af/team?q=${encodeURIComponent(h)}`).then(r=>r.json()),
+      fetch(`${b}/af/team?q=${encodeURIComponent(a)}`).then(r=>r.json())
+    ]);
+    if(th.error||ta.error){ el.innerHTML='<span class="hl-bad">'+(th.error||ta.error)+'（需在 Worker 配 APIFOOTBALL_KEY）</span>'; return; }
+    const hid=th.teams&&th.teams[0]&&th.teams[0].id, aid=ta.teams&&ta.teams[0]&&ta.teams[0].id;
+    if(!hid||!aid){ el.textContent='未找到球队，请用标准英文名（如 Spain / Belgium）。'; return; }
+    const [ih,ia,hh]=await Promise.all([
+      fetch(`${b}/af/injuries?team=${hid}&season=2026`).then(r=>r.json()),
+      fetch(`${b}/af/injuries?team=${aid}&season=2026`).then(r=>r.json()),
+      fetch(`${b}/af/h2h?h=${hid}&a=${aid}`).then(r=>r.json())
+    ]);
+    const injList=(name,inj)=>{ const arr=(inj.injuries||[]); return `<b>${name}</b> 伤停 ${arr.length} 人`+(arr.length?'：'+arr.slice(0,6).map(x=>x.player+(x.reason?`(${x.reason})`:'')).join('、'):''); };
+    const h2hList=(hh.h2h||[]).slice(0,6).map(f=>`${f.date.slice(0,10)} ${f.home} ${f.score} ${f.away}`).join('<br>');
+    el.innerHTML=`<div style="margin:6px 0">${injList(h,ih)}</div><div style="margin:6px 0">${injList(a,ia)}</div>`+
+      (h2hList?`<div style="margin-top:8px;color:var(--muted)">近期交锋：<br>${h2hList}</div>`:'')+
+      `<div class="note" style="color:var(--gold)">👆 据此手动微调上方 λ：主力伤缺→下调该队 λ。</div>`;
+    track('fetch_af');
+  }catch(e){ el.textContent='请求失败：'+e; }
+}
+
+// ==== xG 交叉验证：对比赔率反推的 λ ====
+function validateXG(){
+  const xgH=parseFloat(document.getElementById('xgH').value), xgA=parseFloat(document.getElementById('xgA').value);
+  const lamH=parseFloat(document.getElementById('lamH').value), lamA=parseFloat(document.getElementById('lamA').value);
+  const el=document.getElementById('xgResult');
+  if(!xgH||!xgA){ el.textContent='请填两队近期场均 xG（可从 understat/fbref 查）。'; return; }
+  const dH=Math.abs(xgH-lamH), dA=Math.abs(xgA-lamA);
+  const judge=(d)=>d<0.25?'<span class="value">高度一致</span>':(d<0.5?'基本一致':'<span class="hl-bad">分歧较大</span>');
+  el.innerHTML=`当前 λ(赔率反推)：主 ${lamH.toFixed(2)} / 客 ${lamA.toFixed(2)}<br>`+
+    `xG(实力)：主 ${xgH.toFixed(2)} / 客 ${xgA.toFixed(2)}<br>`+
+    `差异：主 ${dH.toFixed(2)} ${judge(dH)}，客 ${dA.toFixed(2)} ${judge(dA)}<br>`+
+    `<span class="note">一致→预测置信度高；分歧大→市场可能定价了 xG 之外的信息(伤停/战意)，或 xG 样本有偏，需谨慎。</span>`;
+  track('validate_xg');
+}
+
 // 记住上次用的代理地址
 (function(){ const b=localStorage.getItem('apiBase'); if(b) document.getElementById('apiBase').value=b; })();
 

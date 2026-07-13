@@ -22,6 +22,16 @@ npx wrangler secret put ODDS_API_KEY   # 粘贴第1步的 key 回车（不会显
 
 部署成功后，浏览器打开 `https://odds-proxy.<你的名>.workers.dev/sports` 应能看到足球赛事列表 JSON。
 
+### （可选）第 4 步：加 API-Football（伤停/阵容/交锋）
+1. 打开 https://www.api-football.com/ → 注册 → 拿 API key（免费 100 次/天）
+2. 设置密钥：
+```bash
+npx wrangler secret put APIFOOTBALL_KEY   # 粘贴 api-football 的 key
+```
+验证：浏览器打开 `.../af/team?q=Spain` 应返回球队列表。
+- `/af/injuries?team=<id>&season=2026` 伤停
+- `/af/h2h?h=<id>&a=<id>` 历史交锋
+
 ## 前端如何用
 把返回的 Worker 网址填进精算分析器页面的「数据源」输入框（下一步我会加），点「拉取赔率」即可自动填入。
 
