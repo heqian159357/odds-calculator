@@ -58,9 +58,42 @@ export default {
         if (url.pathname === '/af/h2h') {
           const h = url.searchParams.get('h'), a = url.searchParams.get('a');
           const d = await afFetch(`/fixtures/headtohead?h2h=${h}-${a}&last=10`);
-          return json({ h2h: (d.response || []).map(f => ({
+          const arr = (d.response || []).filter(f => f.goals.home != null);
+          return json({ count: arr.length, errors: d.errors, h2h: arr.map(f => ({
             date: f.fixture.date, home: f.teams.home.name, away: f.teams.away.name,
             score: `${f.goals.home}-${f.goals.away}` })) });
+        }
+        // /af/form?team=9&last=10 → 近期战绩(算进/失球，可自动填 λ 估算器)
+        if (url.pathname === '/af/form') {
+          const team = url.searchParams.get('team'), last = url.searchParams.get('last') || '10';
+          const d = await afFetch(`/fixtures?team=${team}&last=${last}`);
+          const games = (d.response || []).filter(f => f.goals.home != null);
+          let gf = 0, ga = 0; const list = [];
+          games.forEach(f => {
+            const isHome = f.teams.home.id == team;
+            const my = isHome ? f.goals.home : f.goals.away;
+            const opp = isHome ? f.goals.away : f.goals.home;
+            gf += my; ga += opp;
+            list.push({ date: f.fixture.date.slice(0,10), opp: (isHome?f.teams.away.name:f.teams.home.name), score: `${my}-${opp}`, res: my>opp?'W':(my===opp?'D':'L') });
+          });
+          return json({ n: games.length, gf, ga, avgGF: games.length?(gf/games.length):0, avgGA: games.length?(ga/games.length):0, games: list });
+        }
+        // /af/predictions?fixture=123 → API 自带预测（需 fixture id）
+        if (url.pathname === '/af/predictions') {
+          const fixture = url.searchParams.get('fixture');
+          const d = await afFetch(`/predictions?fixture=${fixture}`);
+          const p = (d.response || [])[0];
+          if (!p) return json({ prediction: null });
+          return json({ prediction: {
+            winner: p.predictions?.winner?.name, advice: p.predictions?.advice,
+            percent: p.predictions?.percent, goals: p.predictions?.goals } });
+        }
+        // /af/fixture?h=9&a=2&season=2026 → 找两队即将/最近的对阵 fixture id
+        if (url.pathname === '/af/fixture') {
+          const h = url.searchParams.get('h'), a = url.searchParams.get('a');
+          const d = await afFetch(`/fixtures/headtohead?h2h=${h}-${a}&next=1`);
+          const f = (d.response || [])[0];
+          return json({ fixture: f ? f.fixture.id : null, date: f ? f.fixture.date : null });
         }
         return json({ error: '未知 /af/ 路由' }, 404);
       } catch (e) { return json({ error: String(e) }, 500); }

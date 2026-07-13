@@ -187,11 +187,11 @@
 
   <!-- API-Football：伤停/交锋 -->
   <div class="card">
-    <h2>🏥 伤停 & 历史交锋 <span style="font-size:12px;color:var(--muted)">API-Football（需另配 key）</span></h2>
+    <h2>🏥 伤停 · 近期战绩 · 交锋 <span style="font-size:12px;color:var(--muted)">API-Football</span></h2>
     <div class="field" style="gap:6px;flex-wrap:wrap">
       <input id="afHome" type="text" placeholder="主队英文名 如 Spain" style="flex:1;min-width:120px">
       <input id="afAway" type="text" placeholder="客队英文名 如 Belgium" style="flex:1;min-width:120px">
-      <button class="btn ghost" onclick="fetchAF()">查伤停+交锋</button>
+      <button class="btn ghost" onclick="fetchAF()">查询</button>
     </div>
     <div id="afResult" class="note"></div>
     <div class="note">用同一个 Worker 代理（需再配 APIFOOTBALL_KEY，见 README）。伤停信息供你<b>手动调整 λ</b>参考——如主力前锋伤缺，可下调该队 λ。免费 100 次/天。</div>
@@ -600,18 +600,43 @@ async function fetchAF(){
     if(th.error||ta.error){ el.innerHTML='<span class="hl-bad">'+(th.error||ta.error)+'（需在 Worker 配 APIFOOTBALL_KEY）</span>'; return; }
     const hid=th.teams&&th.teams[0]&&th.teams[0].id, aid=ta.teams&&ta.teams[0]&&ta.teams[0].id;
     if(!hid||!aid){ el.textContent='未找到球队，请用标准英文名（如 Spain / Belgium）。'; return; }
-    const [ih,ia,hh]=await Promise.all([
+    const [ih,ia,hh,fh,fa]=await Promise.all([
       fetch(`${b}/af/injuries?team=${hid}&season=2026`).then(r=>r.json()),
       fetch(`${b}/af/injuries?team=${aid}&season=2026`).then(r=>r.json()),
-      fetch(`${b}/af/h2h?h=${hid}&a=${aid}`).then(r=>r.json())
+      fetch(`${b}/af/h2h?h=${hid}&a=${aid}`).then(r=>r.json()),
+      fetch(`${b}/af/form?team=${hid}&last=10`).then(r=>r.json()),
+      fetch(`${b}/af/form?team=${aid}&last=10`).then(r=>r.json())
     ]);
+    _afForm={h:fh,a:fa,hName:h,aName:a}; // 存供"填入估算器"
     const injList=(name,inj)=>{ const arr=(inj.injuries||[]); return `<b>${name}</b> 伤停 ${arr.length} 人`+(arr.length?'：'+arr.slice(0,6).map(x=>x.player+(x.reason?`(${x.reason})`:'')).join('、'):''); };
-    const h2hList=(hh.h2h||[]).slice(0,6).map(f=>`${f.date.slice(0,10)} ${f.home} ${f.score} ${f.away}`).join('<br>');
-    el.innerHTML=`<div style="margin:6px 0">${injList(h,ih)}</div><div style="margin:6px 0">${injList(a,ia)}</div>`+
-      (h2hList?`<div style="margin-top:8px;color:var(--muted)">近期交锋：<br>${h2hList}</div>`:'')+
-      `<div class="note" style="color:var(--gold)">👆 据此手动微调上方 λ：主力伤缺→下调该队 λ。</div>`;
+    // 近期战绩
+    const formLine=(name,f)=>{ if(!f||!f.n) return `<b>${name}</b>：近期战绩无数据`;
+      const rec=(f.games||[]).slice(0,6).map(g=>g.res).join(''); // 如 WWDLW
+      return `<b>${name}</b> 近${f.n}场：进${f.gf}失${f.ga}（场均 ${f.avgGF.toFixed(2)}/${f.avgGA.toFixed(2)}）近况 ${rec}`; };
+    const h2hArr=hh.h2h||[];
+    const h2hList=h2hArr.slice(0,6).map(f=>`${f.date.slice(0,10)} ${f.home} ${f.score} ${f.away}`).join('<br>');
+    el.innerHTML=
+      `<div style="margin:6px 0">${injList(h,ih)}</div><div style="margin:6px 0">${injList(a,ia)}</div>`+
+      `<div style="margin:8px 0;border-top:1px solid var(--line);padding-top:8px">${formLine(h,fh)}<br>${formLine(a,fa)}</div>`+
+      `<button class="btn ghost" style="padding:6px 10px" onclick="applyFormToEstimator()">↓ 用近期战绩填入 λ 估算器</button>`+
+      (h2hList?`<div style="margin-top:8px;color:var(--muted)">近期交锋：<br>${h2hList}</div>`
+             :`<div style="margin-top:8px;color:var(--muted)">近期交锋：无数据（国家队 h2h 覆盖有限，属正常）</div>`)+
+      `<div class="note" style="color:var(--gold)">👆 主力伤缺→手动下调该队 λ；近期战绩可一键填入估算器。</div>`;
     track('fetch_af');
   }catch(e){ el.textContent='请求失败：'+e; }
+}
+let _afForm=null;
+// 把近期战绩填入 λ 估算器
+function applyFormToEstimator(){
+  if(!_afForm||!_afForm.h||!_afForm.h.n){ alert('无近期战绩数据'); return; }
+  const fh=_afForm.h, fa=_afForm.a;
+  document.getElementById('hGF').value=fh.gf; document.getElementById('hGA').value=fh.ga; document.getElementById('hN').value=fh.n;
+  document.getElementById('aGF').value=fa.gf; document.getElementById('aGA').value=fa.ga; document.getElementById('aN').value=fa.n;
+  // 展开手动模式并算 λ
+  const fold=document.querySelector('.manual-fold'); if(fold) fold.open=true;
+  estLambda();
+  document.getElementById('afResult').scrollIntoView({behavior:'smooth',block:'nearest'});
+  track('apply_form');
 }
 
 // ==== xG 交叉验证：对比赔率反推的 λ ====
