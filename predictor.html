@@ -200,7 +200,15 @@ npx wrangler secret put APIFOOTBALL_KEY</code>
         详细图文见仓库 <a href="https://github.com/heqian159357/odds-calculator/blob/main/worker/README.md" target="_blank" style="color:var(--accent)">worker/README.md</a>。地址会自动记住，只需填一次。
       </div>
     </details>
-    <div class="note">拉来的是<b>国际博彩盘</b>，仅作模型参考；比分盘不提供，需手填竞彩。免费额度 500 次/月。</div>
+    <div class="note">拉来的是<b>国际博彩盘</b>（已聚合 eu/uk/us/au 多地区多家博彩取均值）；比分盘不提供，需手填竞彩。免费额度 500 次/月。</div>
+    <details style="margin-top:8px">
+      <summary style="cursor:pointer;color:var(--accent);font-size:13px">🏆 查夺冠概率（冠军盘）· 🥅 查赛果</summary>
+      <div class="btns" style="margin-top:8px">
+        <button class="btn ghost" onclick="fetchOutrights()">🏆 夺冠概率</button>
+        <button class="btn ghost" onclick="fetchScores()">🥅 近3天赛果</button>
+      </div>
+      <div id="extraResult" class="note"></div>
+    </details>
   </div>
 
   <!-- API-Football：伤停/交锋 -->
@@ -370,6 +378,42 @@ async function fetchSports(){
     track('api_fetch_sports');
     localStorage.setItem('apiBase', b);
   }catch(e){ st.textContent='请求失败（检查代理地址/网络/CORS）：'+e; }
+}
+// 夺冠概率（冠军盘）
+async function fetchOutrights(){
+  const b=apiBase(); const el=document.getElementById('extraResult');
+  if(!b){ alert('请先填数据代理地址'); return; }
+  el.textContent='拉取冠军盘…';
+  try{
+    const d=await fetch(b+'/outrights?sport=soccer_fifa_world_cup_winner').then(r=>r.json());
+    if(d.error||!d.winners||!d.winners.length){ el.textContent='无冠军盘数据（赛事可能已结束或 key 无此盘）'; return; }
+    // 赔率→概率(去抽水)
+    const inv=d.winners.map(w=>({name:w.name,odds:w.odds,p:1/w.odds}));
+    const s=inv.reduce((a,x)=>a+x.p,0);
+    el.innerHTML='<b style="color:var(--gold)">🏆 夺冠概率（去抽水）</b><br>'+
+      inv.slice(0,12).map((w,i)=>`${i+1}. ${w.name} <span class="value">${(w.p/s*100).toFixed(1)}%</span> <span style="color:var(--muted)">@${w.odds.toFixed(1)}</span>`).join('<br>')+
+      `<div class="note">剩余额度 ${d.remaining||'?'}</div>`;
+    track('fetch_outrights');
+  }catch(e){ el.textContent='请求失败：'+e; }
+}
+// 近3天赛果
+async function fetchScores(){
+  const b=apiBase(), sport=document.getElementById('sportSel').value||'soccer_fifa_world_cup';
+  const el=document.getElementById('extraResult');
+  if(!b){ alert('请先填数据代理地址'); return; }
+  el.textContent='拉取赛果…';
+  try{
+    const d=await fetch(`${b}/scores?sport=${sport}&daysFrom=3`).then(r=>r.json());
+    if(d.error||!d.scores||!d.scores.length){ el.textContent='无赛果数据（近3天无比赛，或该赛事未开赛）'; return; }
+    const done=d.scores.filter(m=>m.completed);
+    el.innerHTML='<b style="color:var(--gold)">🥅 近3天赛果</b><br>'+
+      d.scores.slice(0,15).map(m=>{
+        const sc=(m.score&&m.score.h!=null)?`${m.score.h}-${m.score.a}`:'—';
+        return `${m.home} <b>${sc}</b> ${m.away} ${m.completed?'✅':'⏳'}`;
+      }).join('<br>')+
+      `<div class="note">✅已完赛 ⏳进行中/未开始 · 剩余额度 ${d.remaining||'?'}</div>`;
+    track('fetch_scores');
+  }catch(e){ el.textContent='请求失败：'+e; }
 }
 async function fetchMatches(){
   const b=apiBase(), sport=document.getElementById('sportSel').value;

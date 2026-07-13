@@ -128,11 +128,11 @@ export default {
         return json({ remaining: r.headers.get('x-requests-remaining'), sports: soccer });
       }
 
-      // 路由2：取指定赛事的赔率
+      // 路由2：取指定赛事的赔率（默认多地区，聚合更多博彩）
       if (url.pathname === '/odds') {
         const sport = url.searchParams.get('sport') || 'soccer_fifa_world_cup';
-        const regions = url.searchParams.get('regions') || 'eu';       // eu=欧洲盘(十进制赔率)
-        const markets = url.searchParams.get('markets') || 'h2h,totals,spreads'; // h2h=胜平负, totals=大小球, spreads=亚盘让球
+        const regions = url.searchParams.get('regions') || 'eu,uk,us,au'; // 多地区=更多博彩报价
+        const markets = url.searchParams.get('markets') || 'h2h,totals,spreads';
         const q = `${base}/sports/${sport}/odds/?apiKey=${key}&regions=${regions}&markets=${markets}&oddsFormat=decimal`;
         const r = await fetch(q);
         if (!r.ok) return json({ error: 'Odds API 返回错误', status: r.status, detail: await r.text() }, r.status);
@@ -144,12 +144,50 @@ export default {
         });
       }
 
+      // 路由3：赛果/比分（含已完赛结果+进行中），daysFrom 最多3天(免费版)
+      if (url.pathname === '/scores') {
+        const sport = url.searchParams.get('sport') || 'soccer_fifa_world_cup';
+        const daysFrom = url.searchParams.get('daysFrom') || '3';
+        const r = await fetch(`${base}/sports/${sport}/scores/?apiKey=${key}&daysFrom=${daysFrom}`);
+        if (!r.ok) return json({ error: 'scores 返回错误', status: r.status, detail: await r.text() }, r.status);
+        const data = await r.json();
+        return json({
+          remaining: r.headers.get('x-requests-remaining'),
+          scores: (Array.isArray(data) ? data : []).map(m => ({
+            home: m.home_team, away: m.away_team, completed: m.completed,
+            time: m.commence_time,
+            score: (m.scores || []).reduce((o, s) => (o[s.name === m.home_team ? 'h' : 'a'] = s.score, o), {}),
+          })),
+        });
+      }
+
+      // 路由4：冠军盘（夺冠赔率）
+      if (url.pathname === '/outrights') {
+        const sport = url.searchParams.get('sport') || 'soccer_fifa_world_cup_winner';
+        const r = await fetch(`${base}/sports/${sport}/odds/?apiKey=${key}&regions=eu&markets=outrights&oddsFormat=decimal`);
+        if (!r.ok) return json({ error: 'outrights 返回错误', status: r.status, detail: await r.text() }, r.status);
+        const data = await r.json();
+        // 聚合各博彩夺冠赔率取均值 → 概率
+        const agg = {};
+        (Array.isArray(data) ? data : []).forEach(ev => (ev.bookmakers || []).forEach(bk =>
+          (bk.markets || []).forEach(mk => (mk.outcomes || []).forEach(o => {
+            agg[o.name] = agg[o.name] || { sum: 0, n: 0 };
+            agg[o.name].sum += o.price; agg[o.name].n++;
+          }))));
+        const teams = Object.entries(agg).map(([name, v]) => ({ name, odds: v.sum / v.n }))
+          .sort((a, b) => a.odds - b.odds).slice(0, 20);
+        return json({ remaining: r.headers.get('x-requests-remaining'), winners: teams });
+      }
+
       // 默认：使用说明
       return json({
         service: 'The Odds API 代理 (Cloudflare Worker)',
         endpoints: {
-          '/sports': '列出所有足球赛事的 sport key',
-          '/odds?sport=<key>&regions=eu&markets=h2h,totals': '取某赛事所有比赛的赔率',
+          '/sports': '列出所有足球赛事',
+          '/odds?sport=<key>&regions=eu,uk,us,au&markets=h2h,totals,spreads': '赔率(多地区)',
+          '/scores?sport=<key>&daysFrom=3': '赛果/比分',
+          '/outrights?sport=soccer_fifa_world_cup_winner': '冠军盘',
+          '/af/*': 'API-Football: injuries/form/h2h/predictions/lineup/topscorers',
         },
       });
     } catch (e) {
