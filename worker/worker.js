@@ -76,7 +76,8 @@ export default {
             gf += my; ga += opp;
             list.push({ date: f.fixture.date.slice(0,10), opp: (isHome?f.teams.away.name:f.teams.home.name), score: `${my}-${opp}`, res: my>opp?'W':(my===opp?'D':'L') });
           });
-          return json({ n: games.length, gf, ga, avgGF: games.length?(gf/games.length):0, avgGA: games.length?(ga/games.length):0, games: list });
+          return json({ n: games.length, gf, ga, avgGF: games.length?(gf/games.length):0, avgGA: games.length?(ga/games.length):0, games: list,
+            _debug: { results: d.results, errors: d.errors, paging: d.paging } });
         }
         // /af/predictions?fixture=123 → API 自带预测（需 fixture id）
         if (url.pathname === '/af/predictions') {
