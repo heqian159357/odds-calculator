@@ -462,64 +462,68 @@ function applyMatchOdds(){
     document.getElementById('oD').value=(h2h['D']/h2hN).toFixed(2);
     document.getElementById('oL').value=(h2h['A']/h2hN).toFixed(2);
   }
-  // 大小球：取最主流盘线的 Over/Under 均值
-  _mktTotals=null;
+  // 大小球：保留【所有盘线】做约束(一次调用全带回,不额外花额度)
+  _mktTotals=null; _mktTotalsAll=[];
   const byLine={};
   for(const key in tot){ const [side,pt]=key.split('_'); byLine[pt]=byLine[pt]||{}; byLine[pt][side]=tot[key]/totN[key]; }
+  for(const pt in byLine){ if(byLine[pt].Over&&byLine[pt].Under){
+    const dvo=devig({O:byLine[pt].Over,U:byLine[pt].Under});
+    _mktTotalsAll.push({line:+pt, over:byLine[pt].Over, under:byLine[pt].Under, pOver:dvo.probs.O});
+  }}
+  _mktTotalsAll.sort((a,b)=>a.line-b.line);
+  // 主展示仍用最接近 2.5 的
   let bestT=null,bd=99;
-  for(const pt in byLine){ if(byLine[pt].Over&&byLine[pt].Under){ const dd=Math.abs(+pt-2.5); if(dd<bd){bd=dd;bestT=pt;} } }
-  if(bestT){ _mktTotals={line:+bestT, over:byLine[bestT].Over, under:byLine[bestT].Under}; }
+  _mktTotalsAll.forEach(x=>{ const dd=Math.abs(x.line-2.5); if(dd<bd){bd=dd;bestT=x;} });
+  if(bestT){ _mktTotals={line:bestT.line, over:bestT.over, under:bestT.under}; }
 
-  // 亚盘：取主队让球盘(通常主队负让 -0.5/-1)，H_point 与 A_(-point) 配对
-  _mktSpread=null;
+  // 亚盘让球：保留【所有让球盘线】做约束
+  _mktSpread=null; _mktSpreadAll=[];
   const sprByLine={};
   for(const key in spr){ const [side,pt]=key.split('_'); sprByLine[pt]=sprByLine[pt]||{}; sprByLine[pt][side]=spr[key]/sprN[key]; }
-  // 找主队让球盘(H的point通常为负，如-0.5/-1)，选|point|最接近1的整/半盘且两边齐全
+  for(const pt in sprByLine){ const p=+pt; if(p<0 && sprByLine[pt].H!=null){ // 主队让球盘(负)
+    const other=(-p).toFixed(1); const oA=(sprByLine[other]&&sprByLine[other].A)||null;
+    if(oA){ const dvs=devig({H:sprByLine[pt].H,A:oA}); _mktSpreadAll.push({point:p, home:sprByLine[pt].H, away:oA, pCover:dvs.probs.H}); }
+  }}
+  _mktSpreadAll.sort((a,b)=>a.point-b.point);
   let bestS=null,sd=99;
-  for(const pt in sprByLine){ if(sprByLine[pt].H!=null){ const p=+pt; const dd=Math.abs(Math.abs(p)-0.75); if(dd<sd){sd=dd;bestS=pt;} } }
-  if(bestS!=null){
-    const p=+bestS; const other=(-p).toFixed(1);
-    const oH=sprByLine[bestS].H, oA=(sprByLine[other]&&sprByLine[other].A)||null;
-    if(oH&&oA) _mktSpread={point:p, home:oH, away:oA}; // 主队让 point 球
-  }
+  _mktSpreadAll.forEach(x=>{ const dd=Math.abs(Math.abs(x.point)-0.75); if(dd<sd){sd=dd;bestS=x;} });
+  if(bestS){ _mktSpread={point:bestS.point, home:bestS.home, away:bestS.away}; }
 
   _predMatchName=`${m.home_team} vs ${m.away_team}`;
   document.getElementById('predMatchName').textContent=_predMatchName;
   calc();
   const parts=[];
-  if(_mktTotals) parts.push(`大小球(O/U ${_mktTotals.line})`);
-  if(_mktSpread) parts.push(`亚盘(让${_mktSpread.point})`);
+  if(_mktTotalsAll.length) parts.push(`大小球×${_mktTotalsAll.length}盘线`);
+  if(_mktSpreadAll.length) parts.push(`亚盘×${_mktSpreadAll.length}盘线`);
   document.getElementById('apiStatus').innerHTML=
-    `✅ 已获取「${m.home_team} vs ${m.away_team}」胜平负${parts.length?'＋'+parts.join('＋'):''}（多家均值）。<br><span style="color:var(--good)">👉 点顶部「🎯 反推 λ 并预测」，再手填竞彩比分赔率找 value。</span>`;
+    `✅ 已获取「${m.home_team} vs ${m.away_team}」胜平负${parts.length?'＋'+parts.join('＋'):''}（多家均值，全盘线联立）。<br><span style="color:var(--good)">👉 点顶部「🎯 反推 λ 并预测」看各种命中概率。</span>`;
   track('api_apply_odds');
 }
-let _mktTotals=null, _mktSpread=null, _predMatchName='';
+let _mktTotals=null, _mktSpread=null, _mktTotalsAll=[], _mktSpreadAll=[], _predMatchName='';
 
-// ==== 用赔率反推 λ（精算核心：市场赔率是最好的 λ 数据源）====
-// 给定 λ1,λ2,ρ，算模型的 胜/平/负 及 P(总进球>line)
-function modelProbsFor(lh,la,rho,line,sppoint){
+// ==== 用赔率反推 λ（国际锐利盘=真值来源，多盘线联立）====
+// 给定 λ1,λ2,ρ，返回比分矩阵 + 各类概率函数
+function modelProbsFor(lh,la,rho){
   let g=[],t=0;
   for(let i=0;i<MAX;i++){g[i]=[];for(let j=0;j<MAX;j++){g[i][j]=pois(lh,i)*pois(la,j)*tau(i,j,lh,la,rho);t+=g[i][j];}}
   for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)g[i][j]/=t;
-  let w=0,dr=0,l=0,over=0,cover=0;
-  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){
-    if(i>j)w+=g[i][j];else if(i===j)dr+=g[i][j];else l+=g[i][j];
-    if(line!=null && i+j>line) over+=g[i][j];
-    // 亚盘：主队让 spoint 球(spoint为负,如-0.75)后仍赢盘，即 (i-j) > |spoint|
-    if(spoint!=null && (i-j) > -spoint) cover+=g[i][j];
-  }
-  return {w,dr,l,over,cover,grid:g};
+  let w=0,dr=0,l=0;
+  for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){ if(i>j)w+=g[i][j];else if(i===j)dr+=g[i][j];else l+=g[i][j]; }
+  const pOver=(line)=>{let s=0;for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)if(i+j>line)s+=g[i][j];return s;};
+  const pCover=(pt)=>{let s=0;for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++)if((i-j)>-pt)s+=g[i][j];return s;}; // 主队让pt(负)后赢盘
+  return {w,dr,l,grid:g,pOver,pCover};
 }
-// 网格搜索求解最拟合市场(胜平负+大小球+亚盘)的 λ1,λ2
-function solveLambda(mW,mD,mL,mOver,line,mCover,spoint,rho){
+// 网格搜索：拟合 胜平负 + 【全部大小球盘线】 + 【全部亚盘盘线】
+function solveLambda(mW,mD,mL,totalsAll,spreadsAll,rho){
   let best=null,bestErr=1e9;
   function search(lo1,hi1,lo2,hi2,step){
     for(let l1=lo1;l1<=hi1;l1+=step){
       for(let l2=lo2;l2<=hi2;l2+=step){
-        const p=modelProbsFor(l1,l2,rho,line,spoint);
+        const p=modelProbsFor(l1,l2,rho);
         let err=(p.w-mW)**2+(p.dr-mD)**2+(p.l-mL)**2;
-        if(mOver!=null) err+=(p.over-mOver)**2;
-        if(mCover!=null) err+=(p.cover-mCover)**2; // 亚盘约束
+        // 每条大小球盘线都作为一个约束（权重按盘线数均摊，避免盖过胜平负）
+        if(totalsAll&&totalsAll.length){ let e=0; totalsAll.forEach(x=>{ e+=(p.pOver(x.line)-x.pOver)**2; }); err+=e/totalsAll.length; }
+        if(spreadsAll&&spreadsAll.length){ let e=0; spreadsAll.forEach(x=>{ e+=(p.pCover(x.point)-x.pCover)**2; }); err+=e/spreadsAll.length; }
         if(err<bestErr){bestErr=err;best={l1,l2};}
       }
     }
@@ -538,58 +542,68 @@ function predictFromOdds(){
   // 去抽水得国际盘(锐利盘)市场概率——作为"真值"
   const dv=devig({H:oW,D:oD,A:oL});
   const mW=dv.probs.H, mD=dv.probs.D, mL=dv.probs.A;
-  let mOver=null, line=null, mCover=null, spoint=null;
-  if(_mktTotals){ const t=devig({O:_mktTotals.over,U:_mktTotals.under}); mOver=t.probs.O; line=_mktTotals.line; }
-  if(_mktSpread){ const s=devig({H:_mktSpread.home,A:_mktSpread.away}); mCover=s.probs.H; spoint=_mktSpread.point; }
 
-  // 用多盘口联立反推 λ（国际盘=真值来源）
-  const sol=solveLambda(mW,mD,mL,mOver,line,mCover,spoint,rho);
+  // 用全部盘线联立反推 λ（国际盘=真值来源）
+  const sol=solveLambda(mW,mD,mL,_mktTotalsAll,_mktSpreadAll,rho);
   document.getElementById('lamH').value=sol.l1.toFixed(2);
   document.getElementById('lamA').value=sol.l2.toFixed(2);
   calc();
 
-  // 真实比分概率分布（来自锐利盘反推的 λ）
-  const p=modelProbsFor(sol.l1,sol.l2,rho,line,spoint);
+  const p=modelProbsFor(sol.l1,sol.l2,rho);
+  const homeName=_predMatchName?_predMatchName.split(' vs ')[0]:'主队';
+  const awayName=_predMatchName?_predMatchName.split(' vs ')[1]:'客队';
+
+  // 各颗粒度命中概率
+  // 1) 比分
   const scores=[];
   for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++) scores.push({s:i+':'+j,p:p.grid[i][j]});
   scores.sort((a,b)=>b.p-a.p);
+  _lastScoreProb={}; scores.forEach(x=>_lastScoreProb[x.s]=x.p);
   const top3=scores.slice(0,3);
-  _lastScoreProb={}; scores.forEach(x=>_lastScoreProb[x.s]=x.p); // 存供竞彩value对比
+  // 2) 总进球
+  const tg={}; for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){const s=i+j;tg[s]=(tg[s]||0)+p.grid[i][j];}
+  const tgArr=Object.entries(tg).map(([g,pr])=>({g:+g,pr})).sort((a,b)=>b.pr-a.pr);
+  // 3) 胜负(取最大)
+  const wdl=[{k:homeName+'胜',p:p.w},{k:'平局',p:p.dr},{k:awayName+'胜',p:p.l}].sort((a,b)=>b.p-a.p);
 
-  const homeName=_predMatchName?_predMatchName.split(' vs ')[0]:'主队';
-  const awayName=_predMatchName?_predMatchName.split(' vs ')[1]:'客队';
-  const fitParts=['胜平负']; if(mOver!=null)fitParts.push('大小球'); if(mCover!=null)fitParts.push('亚盘');
-
+  // ===== 命中概率优先的输出 =====
   let html=
+    `<div style="font-size:13px;color:var(--muted);margin-bottom:6px">最可能的比分（命中概率排名）</div>`+
     `<div class="pred-top3">`+
     top3.map((t,i)=>`<div class="pred-item ${i===0?'rank1':''}">
       <div class="pred-rank">第${i+1}可能</div>
       <div class="pred-score">${t.s}</div>
       <div class="pred-prob">${(t.p*100).toFixed(1)}%</div>
     </div>`).join('')+
-    `</div>`+
-    `<div class="pred-line"><span>预期进球 λ</span><b>${homeName} ${sol.l1.toFixed(2)} · ${awayName} ${sol.l2.toFixed(2)}</b></div>`+
-    `<div class="pred-line"><span>赛果概率</span><b>${homeName}胜 ${(p.w*100).toFixed(0)}% · 平 ${(p.dr*100).toFixed(0)}% · ${awayName}胜 ${(p.l*100).toFixed(0)}%</b></div>`;
+    `</div>`;
 
-  // 若已手填竞彩比分赔率，直接给"竞彩里最值得买的比分"
+  // 命中"胜负"和"总进球"——低颗粒度、高命中率的选择
+  html+=`<div class="pred-line"><span>🎯 押<b>胜负</b>最稳</span><b>${wdl[0].k} <span class="value">${(wdl[0].p*100).toFixed(0)}%</span> ＞ ${wdl[1].k} ${(wdl[1].p*100).toFixed(0)}%</b></div>`;
+  html+=`<div class="pred-line"><span>🎯 押<b>总进球</b></span><b>${tgArr[0].g}球 <span class="value">${(tgArr[0].pr*100).toFixed(0)}%</span> · ${tgArr[1].g}球 ${(tgArr[1].pr*100).toFixed(0)}%</b></div>`;
+  // 命中"比分区间"：Top1~3 累计命中率
+  const cum3=top3.reduce((s,t)=>s+t.p,0);
+  html+=`<div class="pred-line"><span>🎯 同买 Top3 比分</span><b>命中率合计 <span class="value">${(cum3*100).toFixed(0)}%</span>（${top3.map(t=>t.s).join(' / ')}）</b></div>`;
+  html+=`<div class="pred-line"><span>预期进球 λ</span><b>${homeName} ${sol.l1.toFixed(2)} · ${awayName} ${sol.l2.toFixed(2)}</b></div>`;
+
+  // 若手填了竞彩比分赔率：给"命中概率×赔率"参考（收益视角作为次要信息）
   const jc=collectScoreOdds();
   if(Object.keys(jc).length){
     const rank=[];
-    for(const s in jc){ const mp=_lastScoreProb[s]||0; const ev=mp*jc[s]-1; rank.push({s,o:jc[s],mp,ev}); }
-    rank.sort((a,b)=>b.ev-a.ev);
-    const goodOnes=rank.filter(r=>r.ev>0);
-    html+=`<div style="margin-top:12px;font-weight:600;color:var(--gold)">🏆 竞彩比分里最值得买的（真值概率 × 竞彩赔率）：</div>`;
-    html+=rank.slice(0,5).map(r=>
-      `<div class="pred-line"><span>${r.s} @${r.o.toFixed(2)}</span><b class="${r.ev>0?'value':''}">真值${(r.mp*100).toFixed(1)}% · EV ${r.ev>=0?'+':''}${r.ev.toFixed(2)}${r.ev>0?' ✅':''}</b></div>`
+    for(const s in jc){ const mp=_lastScoreProb[s]||0; rank.push({s,o:jc[s],mp,ev:mp*jc[s]-1}); }
+    rank.sort((a,b)=>b.mp-a.mp); // 按命中概率排序(不是EV)
+    html+=`<div style="margin-top:12px;font-weight:600;color:var(--gold)">📊 竞彩比分：命中概率排名（附赔率参考）</div>`;
+    html+=rank.slice(0,6).map(r=>
+      `<div class="pred-line"><span>${r.s} @${r.o.toFixed(2)}</span><b>命中 <span class="value">${(r.mp*100).toFixed(1)}%</span> · 中了得${(r.mp*r.o*100).toFixed(0)}分期望${r.ev>0?' ✅正期望':''}</b></div>`
     ).join('');
-    if(!goodOnes.length) html+=`<div class="note" style="color:var(--muted)">当前竞彩比分赔率下无正EV标的（竞彩抽水太深），理性选择是不买比分盘。</div>`;
   } else {
-    html+=`<div class="note" style="margin-top:10px;color:var(--gold)">👇 在下面「④ 精确比分盘」手填竞彩的比分赔率，这里就会算出"竞彩里最值得买的比分"。</div>`;
+    html+=`<div class="note" style="margin-top:10px;color:var(--gold)">👇 在「④ 精确比分盘」手填竞彩比分赔率，这里按命中概率排名。</div>`;
   }
   document.getElementById('predBody').innerHTML=html;
+
+  const nT=_mktTotalsAll.length, nS=_mktSpreadAll.length;
   document.getElementById('predMeta').innerHTML=
-    `λ 由国际锐利盘反推（拟合 ${fitParts.join('＋')}，误差 ${sol.err.toFixed(4)}）。`+
-    `<br><span style="color:var(--muted)">方法：国际盘已聚合全部信息，视为"真实概率"→反推λ→得真实比分分布→对比你手输的竞彩赔率找 value。竞彩=博彩盘+更高抽水，故用国际盘定真值最可靠。</span>`;
+    `λ 由国际锐利盘反推：拟合 胜平负＋大小球×${nT}＋亚盘×${nS} 共 ${3+nT+nS} 个约束，误差 ${sol.err.toFixed(4)}。`+
+    `<br><span style="color:var(--muted)">命中导向：固定奖金玩法「不中即 0」，故按<b>命中概率</b>排序而非收益率。押胜负最易中(赔率低)，押比分难中(赔率高)，按你的风险偏好选颗粒度。</span>`;
   track('predict_from_odds');
 }
 let _lastScoreProb={};
