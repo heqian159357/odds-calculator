@@ -257,8 +257,15 @@ npx wrangler secret put APIFOOTBALL_KEY</code>
       <a href="https://fbref.com" target="_blank">fbref.com</a>（最全，含国家队、xG、逐场进失球）·
       <a href="https://www.flashscore.com" target="_blank">flashscore</a> / <a href="https://www.sofascore.com" target="_blank">sofascore</a>（比分/近况，部分含 xG）。
       <br>方法：查两队<b>近 5–10 场</b>，把进球数、失球数、场次填进下表；xG 填「近期场均 xG / xGA」到上方 xG 交叉验证。</div>
+    <div class="field" style="margin-bottom:8px">
+      <label>数据类型</label>
+      <select id="estMode" onchange="onEstModeChange()" style="background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:13px;width:auto">
+        <option value="goals">实际进/失球（总数）</option>
+        <option value="xg">⭐ xG / xGA（预期进失球·更准）</option>
+      </select>
+    </div>
     <table style="font-size:13px">
-      <thead><tr><th></th><th>近N场进球</th><th>近N场失球</th><th>场次N</th></tr></thead>
+      <thead><tr><th></th><th id="thGF">近N场进球</th><th id="thGA">近N场失球</th><th id="thN">场次N</th></tr></thead>
       <tbody>
         <tr>
           <td style="color:var(--muted)">主队</td>
@@ -274,6 +281,7 @@ npx wrangler secret put APIFOOTBALL_KEY</code>
         </tr>
       </tbody>
     </table>
+    <div id="estModeNote" class="note">填两队近 N 场的<b>总</b>进球、<b>总</b>失球、场次；系统自动算场均。</div>
     <div class="field" style="margin-top:10px">
       <label>主场系数</label>
       <select id="homeAdv" onchange="estLambda()" style="background:var(--input);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 8px;font-size:13px;width:auto">
@@ -299,6 +307,7 @@ npx wrangler secret put APIFOOTBALL_KEY</code>
         <b>主队进攻力</b> = 主队场均进球 ÷ 基准；<b>客队防守漏洞</b> = 客队场均失球 ÷ 基准。<br>
         <b>λ₁</b> = 基准 × 主队进攻力 × 客队防守漏洞 × 主场系数。λ₂ 同理对称。<br>
         <b>收缩</b>：把攻/守强度按比例拉回 1.0（平均水平），样本少时防止极端值（如全胜0失球）导致过拟合。<br>
+        <b>xG 模式</b>：把公式里的"进球/失球"换成 xG/xGA 即可——xG 剔除运气成分，比实际进球更能反映真实攻防，算出的 λ 更可靠。<br>
         <b>时间衰减</b>：此处用近N场汇总（等权简化）；完整版可对每场加 0.85ⁿ 权重。
       </div>
     </details>
@@ -755,6 +764,30 @@ function validateXG(){
 
 // ---- λ 快速估算器 ----
 let _estLamH=null, _estLamA=null;
+// 切换 进球 / xG 模式：xG 模式直接填「场均 xG/xGA」，场次锁为 1
+function onEstModeChange(){
+  const mode=document.getElementById('estMode').value;
+  const thGF=document.getElementById('thGF'), thGA=document.getElementById('thGA'), thN=document.getElementById('thN');
+  const nCells=[document.getElementById('hN'),document.getElementById('aN')];
+  const note=document.getElementById('estModeNote');
+  if(mode==='xg'){
+    thGF.textContent='场均 xG'; thGA.textContent='场均 xGA'; thN.style.display='none';
+    nCells.forEach(c=>{ c.value=1; c.closest('td').style.display='none'; c.step='0.01'; });
+    ['hGF','hGA','aGF','aGA'].forEach(id=>{document.getElementById(id).step='0.05';});
+    // 给个合理默认(西vs比示例)
+    document.getElementById('hGF').value=1.8; document.getElementById('hGA').value=0.7;
+    document.getElementById('aGF').value=1.5; document.getElementById('aGA').value=1.3;
+    note.innerHTML='填两队<b>近期场均 xG / xGA</b>（从 <a href="https://fbref.com" target="_blank" style="color:var(--accent)">fbref</a> 取近 5–10 场平均）。xG 剔除运气，比进球数更能反映真实实力。';
+  }else{
+    thGF.textContent='近N场进球'; thGA.textContent='近N场失球'; thN.style.display='';
+    nCells.forEach(c=>{ c.closest('td').style.display=''; c.step='1'; });
+    ['hGF','hGA','aGF','aGA'].forEach(id=>{document.getElementById(id).step='1';});
+    document.getElementById('hGF').value=9; document.getElementById('hGA').value=0; document.getElementById('hN').value=5;
+    document.getElementById('aGF').value=12; document.getElementById('aGA').value=5; document.getElementById('aN').value=5;
+    note.innerHTML='填两队近 N 场的<b>总</b>进球、<b>总</b>失球、场次；系统自动算场均。';
+  }
+  estLambda();
+}
 function estLambda(){
   const hGF=parseFloat(document.getElementById('hGF').value)||0;
   const hGA=parseFloat(document.getElementById('hGA').value)||0;
