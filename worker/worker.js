@@ -49,7 +49,7 @@ export default {
       if (url.pathname === '/odds') {
         const sport = url.searchParams.get('sport') || 'soccer_fifa_world_cup';
         const regions = url.searchParams.get('regions') || 'eu';       // eu=欧洲盘(十进制赔率)
-        const markets = url.searchParams.get('markets') || 'h2h,totals'; // h2h=胜平负, totals=大小球
+        const markets = url.searchParams.get('markets') || 'h2h,totals,spreads'; // h2h=胜平负, totals=大小球, spreads=亚盘让球
         const q = `${base}/sports/${sport}/odds/?apiKey=${key}&regions=${regions}&markets=${markets}&oddsFormat=decimal`;
         const r = await fetch(q);
         if (!r.ok) return json({ error: 'Odds API 返回错误', status: r.status, detail: await r.text() }, r.status);
