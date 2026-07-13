@@ -106,6 +106,10 @@
   .pick-name{font-weight:700;min-width:44px;}
   .pick-prob{color:var(--good);font-size:13px;}
   .pick-odds{margin-left:auto;color:var(--muted);font-size:13px;}
+  .manual-fold{margin-bottom:16px;}
+  .manual-fold>summary{background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:12px 16px;cursor:pointer;color:var(--muted);font-size:13px;list-style:none;}
+  .manual-fold>summary::-webkit-details-marker{display:none;}
+  .manual-fold[open]>summary{margin-bottom:12px;color:var(--text);}
   /* ===== 手机适配 ===== */
   @media (max-width:560px){
     body{padding:10px;}
@@ -138,15 +142,15 @@
     <span class="sb-arrow">→</span>
   </a>
   <h1>⚽ 足球精算分析器 <span style="font-size:13px;color:var(--muted)">模型 × 市场 找 Value</span></h1>
-  <div class="sub">精算师的做法：把统计模型算的概率，和博彩赔率去抽水后的市场概率对比，只在「模型概率 &gt; 市场概率」处下注。 · <a href="backtest.html" style="color:var(--accent)">📊 模型回测 →</a></div>
+  <div class="sub">用国际锐利盘反推预期进球 λ，预测最可能的比分与赛果（命中概率导向）。 · <a href="backtest.html" style="color:var(--accent)">📊 模型回测 →</a></div>
 
-  <div class="odds-warn">⚠️ 页面内赔率为示例/历史值，<b>并非实时</b>。赔率随时变动，请以你下注平台的<b>当前赔率</b>为准，逐项核对输入后结果才可靠。</div>
+  <div class="odds-warn">💡 用法：下方「🌐 自动拉取赔率」选比赛 → 回到这里点「预测」。拉不到的比赛，展开底部「🛠 手动模式」手填赔率。</div>
 
   <!-- 🔮 预测结论（结论优先，最醒目） -->
   <div class="card predict-card">
     <h2>🔮 比分预测 <span style="font-size:12px;color:var(--muted)" id="predMatchName"></span></h2>
     <div id="predBody">
-      <div class="note">拉取赔率或手填后，点下方「用赔率反推 λ 并预测」，这里显示最可能的 3 个比分。</div>
+      <div class="note">① 下方自动拉取赔率并选比赛 → ② 点这里「预测」→ 出 Top5 比分与命中概率。</div>
     </div>
     <div class="btns">
       <button class="btn cta" onclick="predictFromOdds()">🎯 用赔率反推 λ 并预测比分</button>
@@ -192,6 +196,10 @@
     <div id="afResult" class="note"></div>
     <div class="note">用同一个 Worker 代理（需再配 APIFOOTBALL_KEY，见 README）。伤停信息供你<b>手动调整 λ</b>参考——如主力前锋伤缺，可下调该队 λ。免费 100 次/天。</div>
   </div>
+
+  <!-- 手动模式（API 拉不到某场时的兜底），默认折叠 -->
+  <details class="manual-fold">
+    <summary>🛠 手动模式（API 拉不到某场比赛时展开：手填 λ / 赔率）</summary>
 
   <!-- 模型参数 -->
   <div class="card">
@@ -274,6 +282,8 @@
       <div id="scoreInputs" style="margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
     </details>
   </div>
+
+  </details><!-- /手动模式 -->
 
   <!-- 方法论 -->
   <div class="card">
