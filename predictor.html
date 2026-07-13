@@ -86,6 +86,8 @@
   .odds-warn b{color:var(--gold);}
   .af-warn{background:rgba(255,90,90,.10);border:1px solid var(--bad);color:var(--text);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:10px;}
   .af-warn b{color:var(--bad);}
+  .src-note{background:rgba(53,196,106,.08);border:1px solid var(--good);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.6;margin-bottom:10px;}
+  .src-note b{color:var(--text);} .src-note a{color:var(--accent);}
   /* 预测结论卡 */
   .predict-card{border:1px solid var(--good);background:linear-gradient(135deg,rgba(53,196,106,.10),rgba(53,196,106,.03));}
   .pred-top3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0;}
@@ -243,12 +245,18 @@ npx wrangler secret put APIFOOTBALL_KEY</code>
       客队 <input class="lam-in" id="xgA" type="number" step="0.05" placeholder="如1.0">
       <button class="btn ghost" style="padding:6px 10px" onclick="validateXG()">对比</button>
     </div>
+    <div class="note">xG 数据免费查：<a href="https://understat.com" target="_blank" style="color:var(--accent)">understat.com</a>（5大联赛）、<a href="https://fbref.com" target="_blank" style="color:var(--accent)">fbref.com</a>（含国家队）。填「近期场均 xG」。</div>
     <div id="xgResult" class="note"></div>
   </div>
 
   <!-- λ 快速估算器 -->
   <div class="card">
     <h2>🧮 λ 快速估算器 <span style="font-size:12px;color:var(--muted)">填近期进/失球，自动算 λ</span></h2>
+    <div class="src-note">📊 <b>去哪查进/失球和 xG（免费、免注册）：</b>
+      <a href="https://understat.com" target="_blank">understat.com</a>（⭐ xG 首选，5大联赛+俄超；搜球队看近期 xG/xGA）·
+      <a href="https://fbref.com" target="_blank">fbref.com</a>（最全，含国家队、xG、逐场进失球）·
+      <a href="https://www.flashscore.com" target="_blank">flashscore</a> / <a href="https://www.sofascore.com" target="_blank">sofascore</a>（比分/近况，部分含 xG）。
+      <br>方法：查两队<b>近 5–10 场</b>，把进球数、失球数、场次填进下表；xG 填「近期场均 xG / xGA」到上方 xG 交叉验证。</div>
     <table style="font-size:13px">
       <thead><tr><th></th><th>近N场进球</th><th>近N场失球</th><th>场次N</th></tr></thead>
       <tbody>
