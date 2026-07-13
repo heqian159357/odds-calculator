@@ -8,7 +8,7 @@
 | 产品阶段 | MVP 已上线，多源数据集成完成，市场验证中 |
 | 线上地址 | https://heqian159357.github.io/odds-calculator/ |
 | 技术栈 | 原生 HTML/CSS/JS · GitHub Pages · Cloudflare Workers（API 代理）· GA4 + GoatCounter |
-| 数据源 | The Odds API（多博彩赔率）· API-Football（伤停/阵容/交锋）· xG（交叉验证） |
+| 数据源 | The Odds API（多博彩赔率）· API-Football（伤停/近期战绩/阵容/API预测/射手榜/交锋）· xG（交叉验证） |
 
 ## 版本变更（v2.0）
 - **方法论修正**：从"用自建模型挑战庄家找 value" → "以国际锐利盘为真值反推 λ，评估软盘（竞彩）机会"。
@@ -277,9 +277,23 @@ $$f^* = \frac{b \cdot p - q}{b}$$
 ```
 - **纯前端单页应用**：所有建模计算在浏览器完成，零建模后端。
 - **Serverless API 代理**（Cloudflare Workers）：解决三问题——① 隐藏 API 密钥（不暴露前端）② 解决 CORS 跨域 ③ 聚合多博彩赔率取均值。
-- **多源数据集成**：The Odds API（赔率）+ API-Football（伤停/阵容/交锋）+ xG（验证），密钥经 `wrangler secret` 注入。
+- **多源数据集成**：The Odds API（赔率）+ API-Football（见下表）+ xG（验证），密钥经 `wrangler secret` 注入，绝不出现在前端。
 - **数据传递**：localStorage 实现跨页面（精算器↔分注计算器）同步。
-- **部署**：GitHub → GitHub Pages 自动 CI/CD；Worker 经 wrangler 部署。
+- **部署**：GitHub → GitHub Pages 自动 CI/CD；Worker 经 wrangler 部署。用户自助——页内提供代理申请与部署图文说明，任何人可 fork 后 10 分钟接入自己的 key。
+
+### 5.3 数据源与用途映射
+| 数据 | 来源 | 代理路由 | 在模型中的角色 |
+|---|---|---|---|
+| 胜平负/大小球/亚盘赔率 | The Odds API | `/odds` | **反推 λ 的主约束** |
+| 伤停名单 | API-Football | `/af/injuries` | 手动微调 λ 的依据 |
+| 近期战绩（进/失球） | API-Football | `/af/form` | **一键填 λ 估算器**（独立于市场的基本面 λ） |
+| API 自带胜率预测 | API-Football | `/af/predictions` | 第二意见（交叉验证赛果） |
+| 首发阵容 | API-Football | `/af/lineup` | 临场核对主力 |
+| 历史交锋 | API-Football | `/af/h2h` | 参考（国家队覆盖有限） |
+| 射手榜 | API-Football | `/af/topscorers` | 参考 |
+| 近期 xG | understat（手录） | — | 交叉验证反推的 λ |
+
+> 设计要点：单次 API 调用返回的全部盘线均用于约束（不增额度）；国家队 h2h 数据 API 覆盖有限，前端做了空数据友好提示。
 
 ### 5.2 埋点
 - **GA4**（G-S7ZJW560JF）+ **GoatCounter**（oraclehe1）双通道。
