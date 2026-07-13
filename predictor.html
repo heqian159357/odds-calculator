@@ -87,6 +87,10 @@
   /* 预测结论卡 */
   .predict-card{border:1px solid var(--good);background:linear-gradient(135deg,rgba(53,196,106,.10),rgba(53,196,106,.03));}
   .pred-top3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0;}
+  .pred-top5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:8px 0;}
+  .pred-top5 .pred-score{font-size:20px;}
+  .pred-top5 .pred-item{padding:10px 4px;}
+  @media (max-width:560px){ .pred-top5{grid-template-columns:repeat(5,1fr);gap:3px;} .pred-top5 .pred-score{font-size:15px;} .pred-top5 .pred-item{padding:8px 2px;} .pred-top5 .pred-prob{font-size:11px;} .pred-top5 .pred-rank{font-size:10px;} }
   .pred-item{background:var(--input);border-radius:10px;padding:14px 8px;text-align:center;border:1px solid var(--line);}
   .pred-item.rank1{border-color:var(--good);}
   .pred-score{font-size:26px;font-weight:800;letter-spacing:1px;}
@@ -559,30 +563,42 @@ function predictFromOdds(){
   for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++) scores.push({s:i+':'+j,p:p.grid[i][j]});
   scores.sort((a,b)=>b.p-a.p);
   _lastScoreProb={}; scores.forEach(x=>_lastScoreProb[x.s]=x.p);
+  const top5=scores.slice(0,5);
   const top3=scores.slice(0,3);
-  // 2) 总进球
+  // 2) 总进球 Top3
   const tg={}; for(let i=0;i<MAX;i++)for(let j=0;j<MAX;j++){const s=i+j;tg[s]=(tg[s]||0)+p.grid[i][j];}
   const tgArr=Object.entries(tg).map(([g,pr])=>({g:+g,pr})).sort((a,b)=>b.pr-a.pr);
+  const tgTop3=tgArr.slice(0,3);
   // 3) 胜负(取最大)
   const wdl=[{k:homeName+'胜',p:p.w},{k:'平局',p:p.dr},{k:awayName+'胜',p:p.l}].sort((a,b)=>b.p-a.p);
 
   // ===== 命中概率优先的输出 =====
+  // 比分 Top5
   let html=
-    `<div style="font-size:13px;color:var(--muted);margin-bottom:6px">最可能的比分（命中概率排名）</div>`+
-    `<div class="pred-top3">`+
-    top3.map((t,i)=>`<div class="pred-item ${i===0?'rank1':''}">
-      <div class="pred-rank">第${i+1}可能</div>
+    `<div style="font-size:13px;color:var(--muted);margin-bottom:6px">最可能的比分 · Top5（命中概率）</div>`+
+    `<div class="pred-top5">`+
+    top5.map((t,i)=>`<div class="pred-item ${i===0?'rank1':''}">
+      <div class="pred-rank">第${i+1}</div>
       <div class="pred-score">${t.s}</div>
       <div class="pred-prob">${(t.p*100).toFixed(1)}%</div>
     </div>`).join('')+
     `</div>`;
 
-  // 命中"胜负"和"总进球"——低颗粒度、高命中率的选择
-  html+=`<div class="pred-line"><span>🎯 押<b>胜负</b>最稳</span><b>${wdl[0].k} <span class="value">${(wdl[0].p*100).toFixed(0)}%</span> ＞ ${wdl[1].k} ${(wdl[1].p*100).toFixed(0)}%</b></div>`;
-  html+=`<div class="pred-line"><span>🎯 押<b>总进球</b></span><b>${tgArr[0].g}球 <span class="value">${(tgArr[0].pr*100).toFixed(0)}%</span> · ${tgArr[1].g}球 ${(tgArr[1].pr*100).toFixed(0)}%</b></div>`;
-  // 命中"比分区间"：Top1~3 累计命中率
-  const cum3=top3.reduce((s,t)=>s+t.p,0);
-  html+=`<div class="pred-line"><span>🎯 同买 Top3 比分</span><b>命中率合计 <span class="value">${(cum3*100).toFixed(0)}%</span>（${top3.map(t=>t.s).join(' / ')}）</b></div>`;
+  // 总进球 Top3
+  html+=`<div style="font-size:13px;color:var(--muted);margin:12px 0 6px">最可能的总进球 · Top3</div>`+
+    `<div class="pred-top3">`+
+    tgTop3.map((t,i)=>`<div class="pred-item ${i===0?'rank1':''}">
+      <div class="pred-rank">第${i+1}</div>
+      <div class="pred-score">${t.g}球</div>
+      <div class="pred-prob">${(t.pr*100).toFixed(1)}%</div>
+    </div>`).join('')+
+    `</div>`;
+
+  // 命中"胜负"——最稳
+  html+=`<div class="pred-line" style="margin-top:10px"><span>🎯 押<b>胜负</b>最稳</span><b>${wdl[0].k} <span class="value">${(wdl[0].p*100).toFixed(0)}%</span> ＞ ${wdl[1].k} ${(wdl[1].p*100).toFixed(0)}%</b></div>`;
+  // 覆盖策略：Top3/Top5 累计命中率
+  const cum3=top3.reduce((s,t)=>s+t.p,0), cum5=top5.reduce((s,t)=>s+t.p,0);
+  html+=`<div class="pred-line"><span>🎯 同买比分覆盖</span><b>Top3 命中 <span class="value">${(cum3*100).toFixed(0)}%</span> · Top5 命中 <span class="value">${(cum5*100).toFixed(0)}%</span></b></div>`;
   html+=`<div class="pred-line"><span>预期进球 λ</span><b>${homeName} ${sol.l1.toFixed(2)} · ${awayName} ${sol.l2.toFixed(2)}</b></div>`;
 
   // 若手填了竞彩比分赔率：给"命中概率×赔率"参考（收益视角作为次要信息）
